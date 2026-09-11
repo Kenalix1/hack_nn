@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>КосмоХакатон 2026 — Проектирование Спутниковой Группировки</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Leaflet CSS & JS for Real Interactive Map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    body { background-color: #0b0f19; color: #e2e8f0; font-family: system-ui, -apple-system, sans-serif; }
+    .glass-card { background: rgba(17, 24, 39, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
+    .glass-card-hover:hover { border-color: rgba(59, 130, 246, 0.4); box-shadow: 0 4px 20px rgba(59, 130, 246, 0.15); }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    #real-map { width: 100%; height: 100%; min-height: 480px; border-radius: 0.75rem; background: #090d16; }
+    .leaflet-popup-content-wrapper { background: #0f172a; color: #e2e8f0; border: 1px solid #334155; }
+    .leaflet-popup-tip { background: #0f172a; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Header -->
+  <header class="glass-card sticky top-0 z-50 px-6 py-4 flex flex-wrap items-center justify-between border-b border-slate-800">
+    <div class="flex items-center space-x-4">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-blue-500/30">
+        <i class="fa-solid fa-satellite"></i>
+      </div>
+      <div>
+        <h1 class="text-xl font-extrabold text-white tracking-wide flex items-center gap-2">
+          КосмоХакатон 2026
+          <span class="text-xs bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded-full font-normal">cosmo-A-1.0</span>
+        </h1>
+        <p class="text-xs text-slate-400">Проектирование и анализ устойчивости спутниковой группировки</p>
+      </div>
+    </div>
+
+    <!-- Scenario Selector Presets -->
+    <div class="flex items-center space-x-2 mt-2 sm:mt-0 overflow-x-auto py-1">
+      <span class="text-xs font-semibold text-slate-400 mr-1"><i class="fa-solid fa-folder-open mr-1"></i> Сценарий:</span>
+      <button onclick="loadPreset('01_full_constellation.json')" class="preset-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600/30 hover:bg-blue-600 text-blue-200 border border-blue-500/40 transition">
+        01_full_constellation
+      </button>
+      <button onclick="loadPreset('02_first_launch.json')" class="preset-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition">
+        02_first_launch
+      </button>
+      <button onclick="loadPreset('03_satellite_outages.json')" class="preset-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition">
+        03_satellite_outages
+      </button>
+      <button onclick="loadPreset('04_link_range.json')" class="preset-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition">
+        04_link_range
+      </button>
+      <label class="px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600/30 hover:bg-emerald-600 text-emerald-200 border border-emerald-500/40 cursor-pointer transition flex items-center gap-1">
+        <i class="fa-solid fa-upload"></i> Загрузить JSON
+        <input type="file" id="json-upload" accept=".json" class="hidden" onchange="handleFileUpload(event)">
+      </label>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <div class="bg-slate-900/80 px-6 py-2 border-b border-slate-800 flex space-x-4 overflow-x-auto text-sm font-medium">
+    <button onclick="switchTab('tab-map')" id="tab-btn-map" class="tab-btn px-4 py-2 rounded-lg bg-blue-600 text-white flex items-center gap-2 transition">
+      <i class="fa-solid fa-earth-americas"></i> Географическая Карта & Маршруты
+    </button>
+    <button onclick="switchTab('tab-analytics')" id="tab-btn-analytics" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 flex items-center gap-2 transition">
+      <i class="fa-solid fa-chart-line"></i> Аналитика и Гантт
+    </button>
+    <button onclick="switchTab('tab-config')" id="tab-btn-config" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 flex items-center gap-2 transition">
+      <i class="fa-solid fa-sliders"></i> Конфигуратор & Отказы
+    </button>
+    <button onclick="switchTab('tab-compare')" id="tab-btn-compare" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 flex items-center gap-2 transition">
+      <i class="fa-solid fa-code-compare"></i> Сравнение Вариантов
+    </button>
+    <button onclick="exportCosmoResult()" class="ml-auto px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold flex items-center gap-2 transition shadow-md shadow-indigo-600/30">
+      <i class="fa-solid fa-download"></i> Экспорт (cosmo-A-result-1.0)
+    </button>
+  </div>
+
+  <!-- Main Container -->
+  <main class="flex-1 p-6 flex flex-col space-y-6">
+
+    <!-- KPI Cards Top Bar -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="glass-card p-4 rounded-xl flex items-center space-x-4 border-l-4 border-blue-500">
+        <div class="w-12 h-12 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center text-xl">
+          <i class="fa-solid fa-network-wired"></i>
+        </div>
+        <div>
+          <p class="text-xs text-slate-400 font-medium">Общая Доступность Сквозной Связи</p>
+          <h3 id="kpi-availability" class="text-2xl font-bold text-white">-- %</h3>
+        </div>
+      </div>
+
+      <div id="kpi-target-card" class="glass-card p-4 rounded-xl flex items-center space-x-4 border-l-4 border-emerald-500">
+        <div class="w-12 h-12 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xl">
+          <i class="fa-solid fa-shield-check"></i>
+        </div>
+        <div>
+          <p class="text-xs text-slate-400 font-medium">Целевой Уровень SLA (≥ 90%)</p>
+          <h3 id="kpi-target-status" class="text-lg font-bold text-emerald-400">ВЫПОЛНЕН</h3>
+        </div>
+      </div>
+
+      <div class="glass-card p-4 rounded-xl flex items-center space-x-4 border-l-4 border-amber-500">
+        <div class="w-12 h-12 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center text-xl">
+          <i class="fa-solid fa-clock-rotate-left"></i>
+        </div>
+        <div>
+          <p class="text-xs text-slate-400 font-medium">Максимальный Перерыв Связи</p>
+          <h3 id="kpi-max-outage" class="text-2xl font-bold text-amber-300">-- с</h3>
+        </div>
+      </div>
+
+      <div class="glass-card p-4 rounded-xl flex items-center space-x-4 border-l-4 border-indigo-500">
+        <div class="w-12 h-12 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xl">
+          <i class="fa-solid fa-satellite-dish"></i>
+        </div>
+        <div>
+          <p class="text-xs text-slate-400 font-medium">Активных Спутников / Всего</p>
+          <h3 id="kpi-sats-count" class="text-2xl font-bold text-white">-- / 48</h3>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 1: REAL GEOGRAPHIC MAP & ROUTING -->
+    <div id="tab-map" class="tab-content flex-1 flex flex-col space-y-4">
+      <div class="glass-card rounded-2xl p-4 flex-1 flex flex-col min-h-[550px]">
+        <!-- Timeline Controls Header -->
+        <div class="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-800">
+          <div class="flex items-center space-x-3">
+            <button onclick="togglePlay()" id="btn-play" class="w-10 h-10 rounded-xl bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center text-lg transition shadow-md shadow-blue-600/30">
+              <i class="fa-solid fa-play" id="icon-play"></i>
+            </button>
+            <div>
+              <div class="text-sm font-semibold text-white">
+                Время: <span id="time-display" class="text-blue-400 font-mono">00:00:00</span> (<span id="time-seconds" class="text-blue-300 font-mono">0</span> с)
+              </div>
+              <div class="text-xs text-slate-400">Шаг: 120 с | Горизонт: 24 часа</div>
+            </div>
+          </div>
+
+          <div class="flex-1 max-w-xl mx-4">
+            <input type="range" id="time-slider" min="0" max="86280" step="120" value="0" oninput="onSliderInput(this.value)" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+          </div>
+
+          <div class="flex items-center space-x-4">
+            <label class="text-xs text-slate-300 font-medium flex items-center gap-1">
+              <i class="fa-solid fa-location-crosshairs text-emerald-400"></i> Клиент:
+            </label>
+            <select id="client-select" onchange="onClientSelect(this.value)" class="bg-slate-800 text-slate-200 border border-slate-700 text-xs rounded-lg px-3 py-2 font-medium focus:outline-none focus:border-blue-500">
+              <option value="C65">C65 (Печора - 65.0°N, 60.0°E)</option>
+              <option value="C70">C70 (Норильск - 70.0°N, 90.0°E)</option>
+              <option value="C72">C72 (Тикси - 72.0°N, 130.0°E)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Real Leaflet Map Container -->
+        <div class="flex-1 relative mt-4 min-h-[480px] rounded-xl overflow-hidden border border-slate-800">
+          <div id="real-map"></div>
+
+          <!-- Active Path Info Overlay -->
+          <div id="path-overlay" class="absolute top-4 right-4 z-[1000] glass-card px-4 py-3 rounded-xl border border-slate-700/80 bg-slate-900/90 text-xs space-y-1.5 max-w-md shadow-2xl">
+            <div class="font-bold text-slate-200 flex items-center justify-between">
+              <span class="flex items-center gap-2"><i class="fa-solid fa-route text-emerald-400"></i> Текущий Маршрут Связи</span>
+              <span id="route-length-badge" class="text-[10px] bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded">-- км</span>
+            </div>
+            <div id="path-nodes-display" class="font-mono text-emerald-300 font-bold break-words">--</div>
+            <div id="path-status-display" class="text-slate-400 text-[11px]">--</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: ANALYTICS & GANTT -->
+    <div id="tab-analytics" class="tab-content hidden flex-1 flex flex-col space-y-6">
+      <div class="glass-card rounded-2xl p-6">
+        <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <i class="fa-solid fa-bars-staggered text-blue-400"></i> Временная Диаграмма Связи и Перерывов по Наземным Пунктам
+        </h2>
+        <div id="gantt-container" class="space-y-4"></div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="glass-card rounded-2xl p-6">
+          <h3 class="text-md font-bold text-white mb-4 flex items-center gap-2">
+            <i class="fa-solid fa-triangle-exclamation text-amber-400"></i> Причины Перерывов Связи
+          </h3>
+          <div class="relative h-64 flex items-center justify-center">
+            <canvas id="chart-outages"></canvas>
+          </div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-6">
+          <h3 class="text-md font-bold text-white mb-4 flex items-center gap-2">
+            <i class="fa-solid fa-shield-virus text-rose-400"></i> Анализ Уязвимости Спутников (Критические Узлы)
+          </h3>
+          <div class="overflow-y-auto max-h-64">
+            <table class="w-full text-xs text-left text-slate-300">
+              <thead class="bg-slate-800 text-slate-400 uppercase font-semibold">
+                <tr>
+                  <th class="p-2">Спутник</th>
+                  <th class="p-2">Плоскость</th>
+                  <th class="p-2">Участие в маршрутах (раз)</th>
+                  <th class="p-2">Статус Уязвимости</th>
+                </tr>
+              </thead>
+              <tbody id="vulnerability-tbody" class="divide-y divide-slate-800"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: CONFIGURATOR & OUTAGES -->
+    <div id="tab-config" class="tab-content hidden flex-1 flex flex-col space-y-6">
+      <div class="glass-card rounded-2xl p-6">
+        <h2 class="text-lg font-bold text-white mb-6 flex items-center gap-2">
+          <i class="fa-solid fa-sliders text-indigo-400"></i> Редактор Параметров Орбитальной Группировки
+        </h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-800 space-y-3">
+            <label class="text-xs font-semibold text-slate-300 block">Очередь Развёртывания (launch_stage)</label>
+            <select id="cfg-launch-stage" class="w-full bg-slate-800 text-slate-200 border border-slate-700 text-sm rounded-lg p-2.5">
+              <option value="1">Этап 1: 16 спутников (Батч 1)</option>
+              <option value="2">Этап 2: 32 спутника (Батчи 1 + 2)</option>
+              <option value="3" selected>Этап 3: 48 спутников (Полная группировка)</option>
+            </select>
+          </div>
+
+          <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-800 space-y-3">
+            <label class="text-xs font-semibold text-slate-300 block">Дальность Межспутниковой Связи (isl_range_km)</label>
+            <input type="number" id="cfg-isl-range" value="3000" step="100" class="w-full bg-slate-800 text-slate-200 border border-slate-700 text-sm rounded-lg p-2.5">
+          </div>
+
+          <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-800 space-y-3">
+            <label class="text-xs font-semibold text-slate-300 block">Мин. Угол Возвышения Станции (min_elevation_deg)</label>
+            <input type="number" id="cfg-min-elevation" value="10" step="1" class="w-full bg-slate-800 text-slate-200 border border-slate-700 text-sm rounded-lg p-2.5">
+          </div>
+        </div>
+
+        <div class="mt-6 border-t border-slate-800 pt-6">
+          <h3 class="text-md font-bold text-white mb-4 flex items-center justify-between">
+            <span><i class="fa-solid fa-burst text-rose-400 mr-2"></i> События Отказов Спутников (`failures`)</span>
+            <button onclick="addFailureRow()" class="px-3 py-1.5 bg-rose-600/30 hover:bg-rose-600 text-rose-200 text-xs font-semibold rounded-lg border border-rose-500/40 transition">
+              + Добавить Отказ
+            </button>
+          </h3>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs text-left text-slate-300">
+              <thead class="bg-slate-800 text-slate-400 uppercase">
+                <tr>
+                  <th class="p-2">Спутник ID</th>
+                  <th class="p-2">Начало Отказа (сек)</th>
+                  <th class="p-2">Конец Отказа (сек)</th>
+                  <th class="p-2">Действие</th>
+                </tr>
+              </thead>
+              <tbody id="failures-tbody" class="divide-y divide-slate-800"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="mt-6 flex justify-end space-x-4">
+          <button onclick="applyConfigAndRun()" class="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-lg shadow-blue-600/30 transition flex items-center gap-2">
+            <i class="fa-solid fa-play"></i> Запустить Расчёт Обновлённой Конфигурации
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: COMPARE & RECOMMENDATIONS -->
+    <div id="tab-compare" class="tab-content hidden flex-1 flex flex-col space-y-6">
+      <div class="glass-card rounded-2xl p-6">
+        <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <i class="fa-solid fa-code-compare text-indigo-400"></i> Сравнение Проектных Вариантов и Обоснование Рекомендаций
+        </h2>
+
+        <div id="comparison-container" class="space-y-6"></div>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    // Global State
+    let currentScenario = null;
+    let simulationResult = null;
+    let savedVariants = [];
+    let currentTimeIndex = 0;
+    let isPlaying = false;
+    let playInterval = null;
+    let selectedClientId = 'C65';
+    let activeTab = 'tab-map';
+    let outageChart = null;
+    let leafletMap = null;
+    let layers = {
+      satellites: null,
+      links: null,
+      route: null,
+      ground: null
+    };
+
+    // Initialize Leaflet Map
+    function initLeafletMap() {
+      if (leafletMap) return;
+      
+      // Center map over Arctic / Northern Russia
+      leafletMap = L.map('real-map', {
+        center: [68.0, 75.0],
+        zoom: 3,
+        zoomControl: true
+      });
+
+      // Dark Matter Map Tiles
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 19
+      }).addTo(leafletMap);
+
+      layers.links = L.layerGroup().addTo(leafletMap);
+      layers.route = L.layerGroup().addTo(leafletMap);
+      layers.satellites = L.layerGroup().addTo(leafletMap);
+      layers.ground = L.layerGroup().addTo(leafletMap);
+    }
+
+    // Load Scenario Preset
+    async function loadPreset(filename) {
+      try {
+        const res = await fetch(`/api/scenarios/${filename}`);
+        if (!res.ok) throw new Error('Preset error');
+        currentScenario = await res.json();
+        await runCurrentSimulation();
+        updateConfigUI();
+      } catch (err) {
+        alert('Ошибка загрузки сценария: ' + err.message);
+      }
+    }
+
+    async function runCurrentSimulation() {
+      try {
+        const res = await fetch('/api/simulate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scenario: currentScenario })
+        });
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.detail || 'Simulation failed');
+        }
+        simulationResult = await res.json();
+        
+        saveVariantToList(currentScenario, simulationResult);
+        updateKPIs();
+        renderMap();
+        renderGantt();
+        renderCharts();
+        renderVulnerabilities();
+        renderComparison();
+      } catch (err) {
+        alert('Ошибка при выполнении моделирования: ' + err.message);
+      }
+    }
+
+    function saveVariantToList(sc, res) {
+      const title = sc.meta?.title || sc.meta?.id || 'Вариант ' + (savedVariants.length + 1);
+      const idx = savedVariants.findIndex(v => v.title === title);
+      const varObj = { title, scenario: sc, result: res };
+      if (idx >= 0) savedVariants[idx] = varObj;
+      else savedVariants.push(varObj);
+    }
+
+    function updateKPIs() {
+      if (!simulationResult) return;
+      document.getElementById('kpi-availability').innerText = (simulationResult.overall_availability * 100).toFixed(1) + ' %';
+      
+      const targetStatus = document.getElementById('kpi-target-status');
+      if (simulationResult.all_targets_met) {
+        targetStatus.innerText = 'ВЫПОЛНЕН (≥90%)';
+        targetStatus.className = 'text-lg font-bold text-emerald-400';
+      } else {
+        targetStatus.innerText = 'НЕ ВЫПОЛНЕН (<90%)';
+        targetStatus.className = 'text-lg font-bold text-rose-400';
+      }
+
+      const maxOutageAll = Math.max(...simulationResult.client_summaries.map(c => c.max_outage_s));
+      document.getElementById('kpi-max-outage').innerText = maxOutageAll + ' с';
+
+      const activeSats = simulationResult.snapshots[0]?.satellites.filter(s => s.active).length || 0;
+      document.getElementById('kpi-sats-count').innerText = `${activeSats} / 48`;
+    }
+
+    // Render Real Geographic Map
+    function renderMap() {
+      if (!simulationResult || !leafletMap) return;
+
+      const snap = simulationResult.snapshots[currentTimeIndex];
+      if (!snap) return;
+
+      // Clear previous layers
+      layers.links.clearLayers();
+      layers.route.clearLayers();
+      layers.satellites.clearLayers();
+      layers.ground.clearLayers();
+
+      // Convert ECEF satellite coordinates to lat/lon
+      const satCoords = {};
+      snap.satellites.forEach(sat => {
+        const r = Math.hypot(sat.x_km, sat.y_km, sat.z_km);
+        const lat = Math.asin(sat.z_km / r) * (180 / Math.PI);
+        const lon = Math.atan2(sat.y_km, sat.x_km) * (180 / Math.PI);
+        satCoords[sat.id] = { lat, lon, active: sat.active };
+      });
+
+      // Ground sites coordinates
+      const groundCoords = {};
+      currentScenario.ground_sites.forEach(g => {
+        groundCoords[g.id] = { lat: g.lat_deg, lon: g.lon_deg, role: g.role, name: g.name };
+      });
+
+      // 1. Draw Ground Sites
+      Object.entries(groundCoords).forEach(([id, g]) => {
+        const isGateway = g.role === 'gateway';
+        const color = isGateway ? '#a855f7' : '#10b981';
+        
+        const iconHtml = isGateway 
+          ? `<div style="background-color: ${color}; width: 16px; height: 16px; border-radius: 50%; border: 3px solid #ffffff; box-shadow: 0 0 12px ${color}"></div>`
+          : `<div style="background-color: ${color}; width: 14px; height: 14px; border-radius: 50%; border: 2px solid #ffffff; box-shadow: 0 0 8px ${color}"></div>`;
+
+        const customIcon = L.divIcon({
+          className: 'custom-ground-icon',
+          html: iconHtml,
+          iconSize: [16, 16]
+        });
+
+        const marker = L.marker([g.lat, g.lon], { icon: customIcon });
+        marker.bindPopup(`
+          <div class="text-xs font-sans">
+            <strong class="text-sm font-bold ${isGateway ? 'text-purple-400' : 'text-emerald-400'}">${id} — ${g.name}</strong><br/>
+            <span>Тип: ${isGateway ? 'Шлюз в наземную сеть (Gateway)' : 'Клиентский пункт'}</span><br/>
+            <span>Координаты: ${g.lat.toFixed(2)}°N, ${g.lon.toFixed(2)}°E</span>
+          </div>
+        `);
+        layers.ground.addLayer(marker);
+      });
+
+      // 2. Draw Satellites
+      Object.entries(satCoords).forEach(([id, sat]) => {
+        const color = sat.active ? '#3b82f6' : '#ef4444';
+        const marker = L.circleMarker([sat.lat, sat.lon], {
+          radius: sat.active ? 4 : 3,
+          fillColor: color,
+          color: '#ffffff',
+          weight: 1,
+          opacity: 0.8,
+          fillOpacity: 0.9
+        });
+        marker.bindPopup(`
+          <div class="text-xs font-sans">
+            <strong class="text-sm font-bold text-blue-400">Спутник ${id}</strong><br/>
+            <span>Статус: ${sat.active ? 'Активен' : 'Отказ / Неактивен'}</span><br/>
+            <span>Широта: ${sat.lat.toFixed(2)}° | Долгота: ${sat.lon.toFixed(2)}°</span>
+          </div>
+        `);
+        layers.satellites.addLayer(marker);
+      });
+
+      // 3. Draw ISL Edges (subset for clean display)
+      snap.edges.forEach(([u, v, dist]) => {
+        const p1 = satCoords[u] || groundCoords[u];
+        const p2 = satCoords[v] || groundCoords[v];
+        if (p1 && p2) {
+          const line = L.polyline([[p1.lat, p1.lon], [p2.lat, p2.lon]], {
+            color: '#3b82f6',
+            weight: 0.8,
+            opacity: 0.2
+          });
+          layers.links.addLayer(line);
+        }
+      });
+
+      // 4. Draw Active Route
+      const routeInfo = simulationResult.routes_by_time[currentTimeIndex]?.routes[selectedClientId] || [];
+      const pathDisplay = document.getElementById('path-nodes-display');
+      const statusDisplay = document.getElementById('path-status-display');
+      const lengthBadge = document.getElementById('route-length-badge');
+
+      if (routeInfo.length > 1) {
+        const routePoints = routeInfo.map(id => {
+          const p = satCoords[id] || groundCoords[id];
+          return [p.lat, p.lon];
+        });
+
+        // Compute route distance sum
+        let totalDist = 0;
+        for (let i = 0; i < routeInfo.length - 1; i++) {
+          const u = routeInfo[i], v = routeInfo[i+1];
+          const edge = snap.edges.find(e => (e[0] === u && e[1] === v) || (e[0] === v && e[1] === u));
+          if (edge) totalDist += edge[2];
+        }
+
+        const routeLine = L.polyline(routePoints, {
+          color: '#10b981',
+          weight: 4,
+          opacity: 0.95
+        });
+        layers.route.addLayer(routeLine);
+
+        pathDisplay.innerText = routeInfo.join(' ➔ ');
+        pathDisplay.className = 'font-mono text-emerald-300 font-bold break-words';
+        statusDisplay.innerText = `Переходов: ${routeInfo.length - 1} | Путь активен`;
+        lengthBadge.innerText = `${Math.round(totalDist)} км`;
+      } else {
+        const clientData = simulationResult.client_summaries.find(c => c.id === selectedClientId);
+        const curStepData = clientData?.time_series[currentTimeIndex];
+        const cause = curStepData?.cause || 'no_route';
+        pathDisplay.innerText = 'МАРШРУТ ОТСУТСТВУЕТ';
+        pathDisplay.className = 'font-mono text-rose-400 font-bold';
+        statusDisplay.innerText = `Причина перерыва: ${cause}`;
+        lengthBadge.innerText = '-- км';
+      }
+    }
+
+    // Timeline Controls
+    function onSliderInput(val) {
+      currentTimeIndex = Math.floor(parseInt(val) / 120);
+      updateTimeDisplay();
+      renderMap();
+    }
+
+    function updateTimeDisplay() {
+      const t_s = currentTimeIndex * 120;
+      document.getElementById('time-seconds').innerText = t_s;
+      document.getElementById('time-slider').value = t_s;
+      const hrs = String(Math.floor(t_s / 3600)).padStart(2, '0');
+      const mins = String(Math.floor((t_s % 3600) / 60)).padStart(2, '0');
+      const secs = String(t_s % 60).padStart(2, '0');
+      document.getElementById('time-display').innerText = `${hrs}:${mins}:${secs}`;
+    }
+
+    function togglePlay() {
+      isPlaying = !isPlaying;
+      const icon = document.getElementById('icon-play');
+      if (isPlaying) {
+        icon.className = 'fa-solid fa-pause';
+        playInterval = setInterval(() => {
+          currentTimeIndex = (currentTimeIndex + 1) % 720;
+          updateTimeDisplay();
+          renderMap();
+        }, 120);
+      } else {
+        icon.className = 'fa-solid fa-play';
+        clearInterval(playInterval);
+      }
+    }
+
+    function onClientSelect(val) {
+      selectedClientId = val;
+      renderMap();
+    }
+
+    // Render Gantt Diagram
+    function renderGantt() {
+      if (!simulationResult) return;
+      const container = document.getElementById('gantt-container');
+      container.innerHTML = '';
+
+      simulationResult.client_summaries.forEach(c => {
+        const item = document.createElement('div');
+        item.className = 'bg-slate-900/60 p-4 rounded-xl border border-slate-800 space-y-2';
+
+        const availPct = (c.availability_ratio * 100).toFixed(1);
+        const statusBadge = c.target_met 
+          ? '<span class="text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded">SLA 90% ВЫПОЛНЕН</span>'
+          : '<span class="text-xs bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2 py-0.5 rounded">SLA 90% НЕ ВЫПОЛНЕН</span>';
+
+        item.innerHTML = `
+          <div class="flex justify-between items-center text-sm">
+            <span class="font-bold text-white">${c.id} (${c.name})</span>
+            <div class="flex items-center space-x-3">
+              <span class="text-slate-300">Доступность: <strong class="text-blue-400">${availPct}%</strong></span>
+              <span class="text-slate-400">Макс. перерыв: <strong class="text-amber-400">${c.max_outage_s}с</strong></span>
+              ${statusBadge}
+            </div>
+          </div>
+          <div class="w-full h-6 bg-slate-950 rounded-lg overflow-hidden flex">
+            ${c.time_series.map(ts => {
+              let color = 'bg-emerald-500';
+              if (!ts.connected) {
+                if (ts.cause === 'no_visible_sat') color = 'bg-amber-500';
+                else if (ts.cause === 'isl_disconnected') color = 'bg-rose-500';
+                else color = 'bg-purple-500';
+              }
+              return `<div class="${color} h-full flex-1" title="t=${ts.t_s}s: ${ts.connected ? 'Связь есть' : 'Перерыв: ' + ts.cause}"></div>`;
+            }).join('')}
+          </div>
+          <div class="flex text-[10px] text-slate-500 justify-between">
+            <span>0 ч</span>
+            <span>6 ч</span>
+            <span>12 ч</span>
+            <span>18 ч</span>
+            <span>24 ч</span>
+          </div>
+        `;
+        container.appendChild(item);
+      });
+    }
+
+    // Render Charts
+    function renderCharts() {
+      if (!simulationResult) return;
+      const ctx = document.getElementById('chart-outages').getContext('2d');
+      if (outageChart) outageChart.destroy();
+
+      const causes = { 'no_visible_sat': 0, 'isl_disconnected': 0, 'gateway_unreachable': 0 };
+      simulationResult.client_summaries.forEach(c => {
+        causes.no_visible_sat += c.outage_causes.no_visible_sat || 0;
+        causes.isl_disconnected += c.outage_causes.isl_disconnected || 0;
+        causes.gateway_unreachable += c.outage_causes.gateway_unreachable || 0;
+      });
+
+      outageChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Нет видимого спутника', 'Разрыв межспутниковой сети (ISL)', 'Шлюз недоступен'],
+          datasets: [{
+            data: [causes.no_visible_sat, causes.isl_disconnected, causes.gateway_unreachable],
+            backgroundColor: ['#f59e0b', '#ef4444', '#a855f7']
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 11 } } } }
+        }
+      });
+    }
+
+    // Render Vulnerability Table
+    function renderVulnerabilities() {
+      if (!simulationResult) return;
+      const tbody = document.getElementById('vulnerability-tbody');
+      tbody.innerHTML = '';
+      const topSats = simulationResult.vulnerability.top_used_satellites || [];
+
+      topSats.slice(0, 8).forEach(sat => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="p-2 font-mono text-blue-300 font-bold">${sat.satellite_id}</td>
+          <td class="p-2 text-slate-400">Плоскость P${sat.satellite_id.substring(1,2)}</td>
+          <td class="p-2 font-mono text-emerald-400">${sat.route_appearances}</td>
+          <td class="p-2"><span class="bg-rose-500/20 text-rose-300 px-2 py-0.5 rounded">Критический узел</span></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Render Comparison Page
+    function renderComparison() {
+      const container = document.getElementById('comparison-container');
+      container.innerHTML = '';
+
+      if (savedVariants.length < 2) {
+        container.innerHTML = '<p class="text-sm text-slate-400">Запустите расчёт хотя бы 2 разных конфигураций, чтобы сопоставить их результаты.</p>';
+        return;
+      }
+
+      let html = '<div class="overflow-x-auto"><table class="w-full text-xs text-left text-slate-300"><thead class="bg-slate-800 text-slate-400"><tr><th class="p-3">Показатель / Вариант</th>';
+      savedVariants.forEach(v => {
+        html += `<th class="p-3 text-blue-300 font-bold">${v.title}</th>`;
+      });
+      html += '</tr></thead><tbody class="divide-y divide-slate-800">';
+
+      html += `<tr><td class="p-3 font-semibold text-white">Общая Доступность Связи</td>${savedVariants.map(v => `<td class="p-3 font-mono font-bold ${v.result.overall_availability >= 0.9 ? 'text-emerald-400' : 'text-rose-400'}">${(v.result.overall_availability*100).toFixed(1)}%</td>`).join('')}</tr>`;
+      html += `<tr><td class="p-3 font-semibold text-white">Выполнение SLA 90%</td>${savedVariants.map(v => `<td class="p-3 font-semibold ${v.result.all_targets_met ? 'text-emerald-400' : 'text-rose-400'}">${v.result.all_targets_met ? 'ВЫПОЛНЕН' : 'НЕ ВЫПОЛНЕН'}</td>`).join('')}</tr>`;
+      html += `<tr><td class="p-3 font-semibold text-white">Макс. Перерыв Связи</td>${savedVariants.map(v => `<td class="p-3 font-mono text-amber-300">${Math.max(...v.result.client_summaries.map(c=>c.max_outage_s))} с</td>`).join('')}</tr>`;
+      html += `<tr><td class="p-3 font-semibold text-white">Очередь Запуска (launch_stage)</td>${savedVariants.map(v => `<td class="p-3 text-slate-300">Этап ${v.scenario.design.launch_stage}</td>`).join('')}</tr>`;
+      html += `<tr><td class="p-3 font-semibold text-white">Дальность ISL (isl_range_km)</td>${savedVariants.map(v => `<td class="p-3 text-slate-300">${v.scenario.environment.isl_range_km} км</td>`).join('')}</tr>`;
+
+      html += '</tbody></table></div>';
+      container.innerHTML = html;
+    }
+
+    // Config Editor logic
+    function updateConfigUI() {
+      if (!currentScenario) return;
+      document.getElementById('cfg-launch-stage').value = currentScenario.design.launch_stage || 3;
+      document.getElementById('cfg-isl-range').value = currentScenario.environment.isl_range_km || 3000;
+      document.getElementById('cfg-min-elevation').value = currentScenario.environment.min_elevation_deg || 10;
+      renderFailuresTable();
+    }
+
+    function renderFailuresTable() {
+      const tbody = document.getElementById('failures-tbody');
+      tbody.innerHTML = '';
+      (currentScenario.failures || []).forEach((f, idx) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="p-2"><input type="text" value="${f.satellite_id}" onchange="currentScenario.failures[${idx}].satellite_id = this.value" class="bg-slate-800 text-white p-1 rounded w-20"></td>
+          <td class="p-2"><input type="number" value="${f.start_s}" onchange="currentScenario.failures[${idx}].start_s = parseInt(this.value)" class="bg-slate-800 text-white p-1 rounded w-24"></td>
+          <td class="p-2"><input type="number" value="${f.end_s}" onchange="currentScenario.failures[${idx}].end_s = parseInt(this.value)" class="bg-slate-800 text-white p-1 rounded w-24"></td>
+          <td class="p-2"><button onclick="removeFailureRow(${idx})" class="text-rose-400 hover:text-rose-300"><i class="fa-solid fa-trash"></i></button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function addFailureRow() {
+      if (!currentScenario.failures) currentScenario.failures = [];
+      currentScenario.failures.push({ satellite_id: 'S01', start_s: 21600, end_s: 86400 });
+      renderFailuresTable();
+    }
+
+    function removeFailureRow(idx) {
+      currentScenario.failures.splice(idx, 1);
+      renderFailuresTable();
+    }
+
+    async function applyConfigAndRun() {
+      currentScenario.design.launch_stage = parseInt(document.getElementById('cfg-launch-stage').value);
+      currentScenario.environment.isl_range_km = parseFloat(document.getElementById('cfg-isl-range').value);
+      currentScenario.environment.min_elevation_deg = parseFloat(document.getElementById('cfg-min-elevation').value);
+      currentScenario.meta.title = `Пользовательская конф. (Этап ${currentScenario.design.launch_stage})`;
+      await runCurrentSimulation();
+      switchTab('tab-map');
+    }
+
+    // Export Function
+    async function exportCosmoResult() {
+      if (!currentScenario) return;
+      try {
+        const res = await fetch('/api/export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scenario: currentScenario })
+        });
+        const blobData = await res.json();
+        const jsonStr = JSON.stringify(blobData, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `cosmo-A-result-${currentScenario.meta?.id || 'export'}.json`;
+        a.click();
+      } catch (err) {
+        alert('Ошибка при экспорте файла: ' + err.message);
+      }
+    }
+
+    // Tab Navigation
+    function switchTab(tabId) {
+      activeTab = tabId;
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.getElementById(tabId).classList.remove('hidden');
+
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.className = 'tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 flex items-center gap-2 transition';
+      });
+      document.getElementById(`tab-btn-${tabId.replace('tab-', '')}`).className = 'tab-btn px-4 py-2 rounded-lg bg-blue-600 text-white flex items-center gap-2 transition';
+
+      if (tabId === 'tab-map') {
+        setTimeout(() => {
+          if (leafletMap) leafletMap.invalidateSize();
+          renderMap();
+        }, 100);
+      }
+    }
+
+    // File Upload Handler
+    function handleFileUpload(evt) {
+      const file = evt.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          currentScenario = JSON.parse(e.target.result);
+          await runCurrentSimulation();
+          updateConfigUI();
+        } catch (err) {
+          alert('Ошибка чтения JSON файла: ' + err.message);
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    // Initial Auto-Load
+    window.addEventListener('DOMContentLoaded', () => {
+      initLeafletMap();
+      loadPreset('01_full_constellation.json');
+    });
+  </script>
+</body>
+</html>
