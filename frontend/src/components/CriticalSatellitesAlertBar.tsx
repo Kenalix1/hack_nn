@@ -43,7 +43,7 @@ export const CriticalSatellitesAlertBar: React.FC<CriticalSatellitesAlertBarProp
       border: totalCritical > 0 ? '1px solid #ff3b30' : '1px solid #ffaa00',
       borderRadius: '8px',
       padding: '10px 14px',
-      maxWidth: '360px',
+      maxWidth: 'min(360px, calc(100vw - 32px))',
       color: '#fff',
       boxShadow: '0 8px 24px rgba(0, 0, 0, 0.6)',
       fontSize: '12px',

@@ -15,6 +15,7 @@ export const EventLogPanel: React.FC<EventLogPanelProps> = ({ logs }) => {
       bottom: '12px',
       left: '16px',
       width: '420px',
+      maxWidth: 'calc(100vw - 32px)',
       zIndex: 80,
       backgroundColor: '#1a1a1a',
       border: '1px solid #383838',

@@ -46,6 +46,7 @@ export const TimelineBar: React.FC<TimelineBarProps> = ({
       left: '50%',
       transform: 'translateX(-50%)',
       width: '680px',
+      maxWidth: 'calc(100vw - 24px)',
       backgroundColor: '#1f1f1f',
       border: '1px solid #383838',
       borderRadius: '8px',

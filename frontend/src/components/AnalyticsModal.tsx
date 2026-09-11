@@ -148,7 +148,7 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
       {/* Tab 1: Real-Time Metrics Overview */}
       {activeTab === 'metrics' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px' }}>
             <MetricCard
               icon={<ShieldCheck color={!isSlaBreached ? '#00ff88' : '#ff3b30'} size={20} />}
               title="Общая Доступность (SLA)"
@@ -177,7 +177,7 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
 
           <div style={panelStyle}>
             <h4 style={panelHeaderStyle}>Динамическое распределение причин сбоев доступности (Real-Time Outage Breakdown)</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginTop: '8px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginTop: '8px' }}>
               <div style={breakdownCardStyle}>
                 <span style={{ fontSize: '11px', color: '#aaa' }}>Затмение & Тень Земли</span>
                 <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#c084fc' }}>
@@ -382,7 +382,7 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
           </h4>
 
           {/* Metric Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px' }}>
             <MetricCard
               icon={<Globe color="#00ff88" size={20} />}
               title="Глобальное Покрытие Земли"
@@ -462,7 +462,7 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
           <h4 style={{ margin: 0, fontSize: '13px', color: '#ccc' }}>Анализ Уязвимости: Самые нагруженные узлы (Top-used Satellites)</h4>
           <div style={panelStyle}>
             {topSats.length > 0 ? (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
                 {topSats.slice(0, 9).map((item, idx) => {
                   const isOff = offlineSet.has(item.satellite_id);
                   return (
@@ -505,7 +505,7 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
               </span>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
               <div style={{ backgroundColor: '#12161f', border: '1px solid #38bdf840', borderRadius: '4px', padding: '10px' }}>
                 <div style={{ fontSize: '11px', color: '#38bdf8', fontWeight: 600 }}>🟦 Нормальная загрузка (ISL &lt; 50%)</div>
                 <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#fff', marginTop: '4px' }}>
@@ -603,7 +603,7 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
           </h4>
 
           {/* Metric Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px' }}>
             <MetricCard
               icon={<DollarSign color="#00ff88" size={20} />}
               title="Капитальные затраты (CAPEX)"
@@ -641,7 +641,7 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
             </div>
 
             {/* Launch Vehicle Selector */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
               {[
                 { id: 'soyuz', name: 'Союз-2.1б (Фрегат)', costM: 35, cap: 16, country: 'РФ' },
                 { id: 'angara', name: 'Ангара-А5 (Персей)', costM: 48, cap: 24, country: 'РФ' },
@@ -688,7 +688,7 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
               const costPerGbpsMo = Math.round((totalCapexM * 1e6) / (48 * 36));
 
               return (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginTop: '4px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px', marginTop: '4px' }}>
                   <div style={{ backgroundColor: '#0f1724', border: '1px solid #1473e630', borderRadius: '4px', padding: '8px 10px' }}>
                     <div style={{ fontSize: '10px', color: '#94a3b8' }}>Число пусков РКН</div>
                     <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#fff', marginTop: '2px' }}>
