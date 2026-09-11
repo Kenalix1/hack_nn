@@ -3,6 +3,7 @@ import os
 import sys
 import glob
 import json
+import math
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, HTTPException, UploadFile, File
@@ -77,13 +78,173 @@ def get_preset_detail(filename: str):
         raise HTTPException(status_code=404, detail="Preset scenario not found")
     return PRESETS[filename]
 
+@app.get("/api/simulate")
+def simulate_get(scenario_id: str = "01_full_constellation"):
+    try:
+        # Match scenario by preset key or filename
+        matched_key = None
+        for key in PRESETS.keys():
+            if key == scenario_id or key.replace(".json", "") == scenario_id:
+                matched_key = key
+                break
+        
+        if not matched_key:
+            matched_key = list(PRESETS.keys())[0]
+            
+        scenario = PRESETS[matched_key]
+        geometry.validate(scenario)
+        result = run_simulation(scenario)
+        
+        # Build satellites list for 3D view
+        snap0 = result["snapshots"][0] if result.get("snapshots") else {}
+        sat_design_map = {sat['id']: sat for sat in scenario.get('design', {}).get('satellites', [])}
+        
+        sats_list = []
+        for s in snap0.get("satellites", []):
+            sid = s["id"]
+            x = s.get("x_km", 0.0)
+            y = s.get("y_km", 0.0)
+            z = s.get("z_km", 0.0)
+            r = math.sqrt(x*x + y*y + z*z)
+            
+            if r > 0:
+                sub_lat = math.degrees(math.asin(max(-1.0, min(1.0, z / r))))
+                sub_lon = math.degrees(math.atan2(y, x))
+                alt_km = r - 6371.0
+            else:
+                sub_lat, sub_lon, alt_km = 0.0, 0.0, 600.0
+
+            orig_sat = sat_design_map.get(sid, {})
+            p_str = str(orig_sat.get("plane_id", "P1")).replace("P", "")
+            plane_num = int(p_str) if p_str.isdigit() else 1
+
+            sats_list.append({
+                "id": sid,
+                "plane": plane_num,
+                "idx": int(orig_sat.get("slot_deg", 0)),
+                "altitude": alt_km,
+                "inc": scenario.get("environment", {}).get("inclination_deg", 86.4),
+                "raan": 0,
+                "arg_per": 0,
+                "true_anomaly": 0,
+                "sub_lat": round(sub_lat, 4),
+                "sub_lon": round(sub_lon, 4)
+            })
+            
+        gws_list = []
+        for g in scenario.get("ground_sites", []):
+            gws_list.append({
+                "id": g["id"],
+                "name": g.get("name", g["id"]),
+                "lat": g["lat_deg"],
+                "lon": g["lon_deg"],
+                "type": g.get("role", "gateway")
+            })
+            
+        routes_sample = []
+        if result.get("client_summaries"):
+            for cs in result["client_summaries"]:
+                time_series = cs.get("time_series", [])
+                active_entry = next((e for e in time_series if e.get("connected") and e.get("path")), None)
+                if active_entry:
+                    routes_sample.append({
+                        "src": cs["id"],
+                        "dst": active_entry["path"][-1] if len(active_entry["path"]) > 1 else "GW",
+                        "path": active_entry["path"],
+                        "latency_ms": round((cs.get("avg_distance_km") or 1200) / 300.0, 1),
+                        "status": "АКТИВЕН"
+                    })
+
+        return {
+            "scenario_id": scenario_id,
+            "title": scenario.get("meta", {}).get("title", scenario_id),
+            "description": f"Развертывание {scenario.get('design', {}).get('launch_stage', 'полное')}",
+            "timestamp_utc": "2026-09-11T22:30:00Z",
+            "satellites": sats_list,
+            "gateways": gws_list,
+            "routes_sample": routes_sample,
+            "simulation_result": result
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Simulation error: {str(e)}")
+
 @app.post("/api/simulate")
 def simulate(req: SimulateRequest):
     try:
         scenario = req.scenario
         geometry.validate(scenario)
         result = run_simulation(scenario)
-        return result
+        
+        snap0 = result["snapshots"][0] if result.get("snapshots") else {}
+        sat_design_map = {sat['id']: sat for sat in scenario.get('design', {}).get('satellites', [])}
+        
+        sats_list = []
+        for s in snap0.get("satellites", []):
+            sid = s["id"]
+            x = s.get("x_km", 0.0)
+            y = s.get("y_km", 0.0)
+            z = s.get("z_km", 0.0)
+            r = math.sqrt(x*x + y*y + z*z)
+            
+            if r > 0:
+                sub_lat = math.degrees(math.asin(max(-1.0, min(1.0, z / r))))
+                sub_lon = math.degrees(math.atan2(y, x))
+                alt_km = r - 6371.0
+            else:
+                sub_lat, sub_lon, alt_km = 0.0, 0.0, 600.0
+
+            orig_sat = sat_design_map.get(sid, {})
+            p_str = str(orig_sat.get("plane_id", "P1")).replace("P", "")
+            plane_num = int(p_str) if p_str.isdigit() else 1
+
+            sats_list.append({
+                "id": sid,
+                "plane": plane_num,
+                "idx": int(orig_sat.get("slot_deg", 0)),
+                "altitude": round(alt_km, 2),
+                "inc": scenario.get("environment", {}).get("inclination_deg", 86.4),
+                "raan": 0,
+                "arg_per": 0,
+                "true_anomaly": 0,
+                "sub_lat": round(sub_lat, 4),
+                "sub_lon": round(sub_lon, 4)
+            })
+            
+        gws_list = []
+        for g in scenario.get("ground_sites", []):
+            gws_list.append({
+                "id": g["id"],
+                "name": g.get("name", g["id"]),
+                "lat": g["lat_deg"],
+                "lon": g["lon_deg"],
+                "type": g.get("role", "gateway")
+            })
+            
+        routes_sample = []
+        if result.get("client_summaries"):
+            for cs in result["client_summaries"]:
+                time_series = cs.get("time_series", [])
+                active_entry = next((e for e in time_series if e.get("connected") and e.get("path")), None)
+                if active_entry:
+                    routes_sample.append({
+                        "src": cs["id"],
+                        "dst": active_entry["path"][-1] if len(active_entry["path"]) > 1 else "GW",
+                        "path": active_entry["path"],
+                        "latency_ms": round((cs.get("avg_distance_km") or 1200) / 300.0, 1),
+                        "status": "АКТИВЕН"
+                    })
+
+        return {
+            "scenario_id": scenario.get("meta", {}).get("id", "custom_uploaded"),
+            "title": scenario.get("meta", {}).get("title", "Пользовательский Сценарий"),
+            "description": f"Пользовательская конфигурация ({len(sats_list)} спутников)",
+            "timestamp_utc": "2026-09-11T22:40:00Z",
+            "satellites": sats_list,
+            "gateways": gws_list,
+            "routes_sample": routes_sample,
+            "raw_scenario": scenario,
+            "simulation_result": result
+        }
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Simulation error: {str(e)}")
 
@@ -140,9 +301,19 @@ def compare_scenarios(req: CompareRequest):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Comparison error: {str(e)}")
 
+# Mount static assets from frontend/dist/assets if available
+dist_assets = BASE_DIR / "frontend" / "dist" / "assets"
+if dist_assets.exists():
+    app.mount("/assets", StaticFiles(directory=str(dist_assets)), name="assets")
+
 @app.get("/", response_class=HTMLResponse)
 def index_page():
-    index_file = BASE_DIR / "frontend" / "index.html"
-    if index_file.exists():
-        return HTMLResponse(content=index_file.read_text(encoding='utf-8'))
-    return HTMLResponse(content="<h1>CosmoHack Web Interface</h1><p>Frontend file index.html not found.</p>")
+    dist_index = BASE_DIR / "frontend" / "dist" / "index.html"
+    if dist_index.exists():
+        return HTMLResponse(content=dist_index.read_text(encoding='utf-8'))
+    
+    dev_index = BASE_DIR / "frontend" / "index.html"
+    if dev_index.exists():
+        return HTMLResponse(content=dev_index.read_text(encoding='utf-8'))
+    
+    return HTMLResponse(content="<h1>CosmoHack Web Interface</h1><p>Frontend distribution file not found.</p>")
