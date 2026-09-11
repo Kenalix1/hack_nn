@@ -15,6 +15,7 @@ def run_simulation(scenario: dict) -> dict:
     """
     Executes full time-series simulation for scenario over horizon_s with step_s.
     Computes topology, routes, outage breakdown, client metrics, and vulnerability stats.
+    Supports arbitrary satellite constellation sizes.
     """
     geometry.validate(scenario)
     
@@ -33,12 +34,11 @@ def run_simulation(scenario: dict) -> dict:
     time_steps = list(range(0, horizon, step))
     total_steps = len(time_steps)
     
-    # Store results per timestamp
+    total_satellites_count = len(design.get('satellites', []))
+    
     snapshots = []
-    # Store routes per timestamp & client: {t_s: {client_id: path}}
     routes_by_time = []
     
-    # Client metric tracking
     client_stats = {
         c['id']: {
             'client_info': c,
@@ -47,7 +47,7 @@ def run_simulation(scenario: dict) -> dict:
             'outage_causes': {'no_visible_sat': 0, 'isl_disconnected': 0, 'gateway_unreachable': 0},
             'hop_counts': [],
             'path_lengths': [],
-            'time_series': [] # {t_s, visible_sats, path, connected, cause}
+            'time_series': []
         }
         for c in clients
     }
@@ -58,25 +58,18 @@ def run_simulation(scenario: dict) -> dict:
         snap = geometry.snapshot(scenario, t_s)
         snapshots.append(snap)
         
-        # Build graph for routing
         G = nx.Graph()
         
-        # Add satellite nodes
         active_sats = {sat['id'] for sat in snap['satellites'] if sat['active']}
         for sat_id in active_sats:
             G.add_node(sat_id, type='sat')
             
-        # Add ground nodes
         for g in ground_sites:
             G.add_node(g['id'], type=g['role'])
             
-        # Add edges from snap
-        # Note: edges format in snapshot: [node1, node2, distance_km]
         for u, v, dist in snap['edges']:
-            # Ground sites cannot relay, but can connect to satellites
             G.add_edge(u, v, weight=dist)
             
-        # Check active gateways at t_s
         offline_gateways = {
             f['gateway_id'] 
             for f in scenario.get('gateway_outages', []) 
@@ -99,15 +92,10 @@ def run_simulation(scenario: dict) -> dict:
             best_length = float('inf')
             
             if has_visibility and active_gateways:
-                # Find shortest path from client to any active gateway
-                # Ground sites are not allowed to be intermediate hops!
-                # We do this by searching paths where intermediate nodes are satellites.
                 for gw in active_gateways:
                     if G.has_node(cid) and G.has_node(gw) and nx.has_path(G, cid, gw):
                         try:
-                            # Shortest path by hop count or distance
                             p = nx.shortest_path(G, source=cid, target=gw, weight='weight')
-                            # Verify no other ground site is in intermediate nodes
                             intermediate = p[1:-1]
                             if all(G.nodes[node]['type'] == 'sat' for node in intermediate):
                                 length = nx.path_weight(G, p, weight='weight')
@@ -123,7 +111,6 @@ def run_simulation(scenario: dict) -> dict:
                 client_stats[cid]['path_lengths'].append(best_length)
                 step_routes[cid] = best_path
                 
-                # Track satellite usage for vulnerability analysis
                 for sid in best_path[1:-1]:
                     satellite_usage_count[sid] = satellite_usage_count.get(sid, 0) + 1
                     
@@ -152,7 +139,6 @@ def run_simulation(scenario: dict) -> dict:
             'routes': step_routes
         })
         
-    # Process summary metrics for each client
     client_summaries = []
     target_avail = env['target_availability']
     
@@ -160,7 +146,6 @@ def run_simulation(scenario: dict) -> dict:
         vis_ratio = data['visible_steps'] / total_steps
         conn_ratio = data['connected_steps'] / total_steps
         
-        # Calculate outage intervals and max outage duration
         outage_intervals = []
         in_outage = False
         current_start = 0
@@ -215,26 +200,28 @@ def run_simulation(scenario: dict) -> dict:
             'time_series': data['time_series']
         })
         
-    # Vulnerability Analysis
     top_used_satellites = sorted(
         [{'satellite_id': k, 'route_appearances': v} for k, v in satellite_usage_count.items()],
         key=lambda x: x['route_appearances'],
         reverse=True
     )
     
-    # Overall summary
     overall_availability = round(float(np.mean([c['availability_ratio'] for c in client_summaries])), 4)
     all_targets_met = all(c['target_met'] for c in client_summaries)
+    
+    first_snap_active = len([s for s in snapshots[0]['satellites'] if s['active']]) if snapshots else 0
     
     return {
         'scenario_meta': scenario.get('meta', {}),
         'environment': env,
         'design': design,
+        'total_satellites': total_satellites_count,
+        'active_satellites': first_snap_active,
         'overall_availability': overall_availability,
         'all_targets_met': all_targets_met,
         'client_summaries': client_summaries,
         'vulnerability': {
-            'top_used_satellites': top_used_satellites[:10]
+            'top_used_satellites': top_used_satellites[:15]
         },
         'time_steps': time_steps,
         'routes_by_time': routes_by_time,
@@ -242,9 +229,6 @@ def run_simulation(scenario: dict) -> dict:
     }
 
 def export_cosmo_result(scenario: dict, simulation_result: dict) -> dict:
-    """
-    Formats the simulation result into standard cosmo-A-result-1.0 JSON format.
-    """
     routes_list = []
     for step_item in simulation_result['routes_by_time']:
         t_s = step_item['t_s']
