@@ -163,6 +163,7 @@ def simulate_get(scenario_id: str = "01_full_constellation"):
             "satellites": sats_list,
             "gateways": gws_list,
             "routes_sample": routes_sample,
+            "raw_scenario": scenario,
             "simulation_result": result
         }
     except Exception as e:
