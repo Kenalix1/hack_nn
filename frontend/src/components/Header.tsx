@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, RotateCcw, Clock, Layers, BarChart2, Settings, Copy, PanelRight, Upload, Download, FileJson, ChevronDown, ShieldAlert } from 'lucide-react';
+import { Play, RotateCcw, Clock, Layers, BarChart2, Settings, Copy, PanelRight, Upload, Download, FileJson, ChevronDown, ShieldAlert, Menu, X } from 'lucide-react';
 
 interface HeaderProps {
   scenarios: Array<{ id: string; title: string }>;
@@ -32,6 +32,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const [utcTime, setUtcTime] = useState<string>('');
   const [isExportMenuOpen, setIsExportMenuOpen] = useState<boolean>(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const exportMenuRef = useRef<HTMLDivElement>(null);
 
@@ -306,27 +307,39 @@ export const Header: React.FC<HeaderProps> = ({
 
         @media (max-width: 1024px) {
           .hdr-container {
-            overflow-x: auto;
-            gap: 12px;
-            padding: 0 10px;
-          }
-          .hdr-section {
-            flex-shrink: 0;
+            gap: 8px;
+            padding: 0 8px;
           }
         }
 
         @media (max-width: 768px) {
           .hdr-container {
-            height: 52px;
+            height: 48px;
           }
           .hdr-brand-text {
             display: none;
           }
-          .hdr-clock-text {
-            display: none;
-          }
           .hdr-label {
             display: none;
+          }
+          .hdr-clock {
+            font-size: 10px;
+            padding: 0 6px;
+          }
+          .hdr-shortcuts-desktop {
+            display: none !important;
+          }
+          .hdr-mobile-trigger {
+            display: inline-flex !important;
+          }
+        }
+
+        @media (min-width: 769px) {
+          .hdr-mobile-trigger {
+            display: none !important;
+          }
+          .hdr-mobile-drawer {
+            display: none !important;
           }
         }
       `}</style>
@@ -431,8 +444,8 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
       </div>
 
-      {/* Windows Shortcuts */}
-      <div className="hdr-section">
+      {/* Windows Shortcuts (Desktop) */}
+      <div className="hdr-section hdr-shortcuts-desktop">
         <button
           onClick={() => onOpenWindow('emergency')}
           className="hdr-btn"
@@ -481,6 +494,15 @@ export const Header: React.FC<HeaderProps> = ({
           <span>{utcTime}</span>
         </div>
 
+        {/* Mobile Hamburger Menu Toggle Button */}
+        <button
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          className="hdr-btn hdr-btn-secondary hdr-mobile-trigger"
+          title="Меню навигации"
+        >
+          {isMobileMenuOpen ? <X size={16} /> : <Menu size={16} />}
+        </button>
+
         <button
           onClick={onToggleSidebar}
           title="Панель элементов (Аутлайнер)"
@@ -489,6 +511,58 @@ export const Header: React.FC<HeaderProps> = ({
           <PanelRight size={16} />
         </button>
       </div>
+
+      {/* Mobile Drawer Menu Dropdown */}
+      {isMobileMenuOpen && (
+        <div
+          className="hdr-mobile-drawer"
+          style={{
+            position: 'absolute',
+            top: '48px',
+            left: 0,
+            width: '100vw',
+            backgroundColor: '#16181d',
+            borderBottom: '1px solid #333',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+            padding: '12px 16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+            zIndex: 99
+          }}
+        >
+          <button
+            onClick={() => { onOpenWindow('emergency'); setIsMobileMenuOpen(false); }}
+            className="hdr-btn"
+            style={{ backgroundColor: '#3b1212', color: '#ff6666', border: '1px solid #7f1d1d', justifyContent: 'flex-start' }}
+          >
+            <ShieldAlert size={14} style={{ color: '#ff4444' }} />
+            <span>Симуляция ЧС & Экономика</span>
+          </button>
+
+          <button onClick={() => { onOpenWindow('analytics'); setIsMobileMenuOpen(false); }} className="hdr-btn hdr-btn-secondary" style={{ justifyContent: 'flex-start' }}>
+            <BarChart2 size={14} style={{ color: '#38bdf8' }} />
+            <span>Аналитика & Диаграмма Гантта</span>
+          </button>
+
+          <button onClick={() => { onOpenWindow('configurator'); setIsMobileMenuOpen(false); }} className="hdr-btn hdr-btn-secondary" style={{ justifyContent: 'flex-start' }}>
+            <Settings size={14} style={{ color: '#a78bfa' }} />
+            <span>Конфигуратор Параметров</span>
+          </button>
+
+          <button onClick={() => { onOpenWindow('compare'); setIsMobileMenuOpen(false); }} className="hdr-btn hdr-btn-secondary" style={{ justifyContent: 'flex-start' }}>
+            <Copy size={14} style={{ color: '#fbbf24' }} />
+            <span>Сравнение Проектов</span>
+          </button>
+
+          {onResetState && (
+            <button onClick={() => { onResetState(); setIsMobileMenuOpen(false); }} className="hdr-btn hdr-btn-danger" style={{ justifyContent: 'flex-start' }}>
+              <RotateCcw size={13} />
+              <span>Сбросить Настройки</span>
+            </button>
+          )}
+        </div>
+      )}
     </header>
   );
 };
