@@ -1,0 +1,58 @@
+name: Deploy to Production VDS (devoriole.ru)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  deploy:
+    name: Build & Deploy via SSH
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v3
+
+      - name: Deploy to VDS Server via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT || 22 }}
+          script: |
+            echo "🚀 Starting automated deployment for devoriole.ru..."
+            
+            # Navigate to application directory (create if doesn't exist)
+            mkdir -p /var/www/devoriole
+            cd /var/www/devoriole
+            
+            # Pull latest changes from git repository
+            if [ -d ".git" ]; then
+              git fetch --all
+              git reset --hard origin/main || git reset --hard origin/master
+            else
+              echo "Git repo not initialized yet. Clone the repository first."
+              exit 1
+            fi
+            
+            # Build frontend assets inside frontend directory
+            if [ -d "frontend" ]; then
+              echo "📦 Building frontend dist bundle..."
+              cd frontend
+              npm install
+              npm run build
+              cd ..
+            fi
+            
+            # Restart Docker container via Docker Compose
+            echo "🐳 Rebuilding Docker containers..."
+            docker compose down || docker-compose down
+            docker compose up --build -d || docker-compose up --build -d
+            
+            # Prune unused docker images to save disk space
+            docker image prune -f
+            
+            echo "✅ Deployment for devoriole.ru completed successfully!"

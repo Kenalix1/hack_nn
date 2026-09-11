@@ -11,8 +11,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-sys.path.append(str(Path(__file__).parent.parent / "Расчетный модуль"))
-import geometry
+from backend import geometry
 from backend.calc_engine import run_simulation, export_cosmo_result
 
 app = FastAPI(title="CosmoHack 2026 - Constellation Resiliency Service")
@@ -78,6 +77,52 @@ def get_preset_detail(filename: str):
         raise HTTPException(status_code=404, detail="Preset scenario not found")
     return PRESETS[filename]
 
+@app.get("/api/shadow_status")
+def get_shadow_status(scenario_id: str = "01_full_constellation", t_s: float = 0.0):
+    matched_key = None
+    for key in PRESETS.keys():
+        if key == scenario_id or key.replace(".json", "") == scenario_id:
+            matched_key = key
+            break
+    
+    if not matched_key:
+        matched_key = list(PRESETS.keys())[0] if PRESETS else None
+    
+    scenario = PRESETS.get(matched_key)
+    if not scenario:
+        raise HTTPException(status_code=404, detail="Scenario not found")
+    
+    sun_eci = [-1.0, 0.0, 0.0]
+    sunlight_map = geometry.sunlight(scenario, t_s, sun_eci)
+    ids, xyz, active = geometry.positions(scenario, t_s)
+    
+    satellites_shadow = []
+    for k, sid in enumerate(ids):
+        x, y, z = float(xyz[k, 0]), float(xyz[k, 1]), float(xyz[k, 2])
+        is_sunlit = bool(sunlight_map.get(sid, True))
+        is_shadow = not is_sunlit
+        satellites_shadow.append({
+            "id": sid,
+            "t_s": t_s,
+            "position_eci_km": {"x": x, "y": y, "z": z},
+            "is_in_shadow": is_shadow,
+            "is_sunlit": is_sunlit,
+            "solar_power_w": 1850 if is_sunlit else 0
+        })
+    
+    return {
+        "scenario_id": scenario_id,
+        "t_s": t_s,
+        "sun_eci": sun_eci,
+        "shadow_cylinder": {
+            "origin_km": [0.0, 0.0, 0.0],
+            "direction": [1.0, 0.0, 0.0],
+            "radius_km": 6378.137,
+            "condition": "x_km > 0 and sqrt(y_km^2 + z_km^2) <= 6378.137"
+        },
+        "satellites": satellites_shadow
+    }
+
 @app.get("/api/simulate")
 def simulate_get(scenario_id: str = "01_full_constellation"):
     try:
@@ -95,13 +140,17 @@ def simulate_get(scenario_id: str = "01_full_constellation"):
         geometry.validate(scenario)
         result = run_simulation(scenario)
         
-        # Build satellites list for 3D view
         snap0 = result["snapshots"][0] if result.get("snapshots") else {}
         sat_design_map = {sat['id']: sat for sat in scenario.get('design', {}).get('satellites', [])}
+        launch_stage = scenario.get('design', {}).get('launch_stage', 3)
         
         sats_list = []
         for s in snap0.get("satellites", []):
             sid = s["id"]
+            orig_sat = sat_design_map.get(sid, {})
+            batch = orig_sat.get("launch_batch", 1)
+            if batch > launch_stage:
+                continue
             x = s.get("x_km", 0.0)
             y = s.get("y_km", 0.0)
             z = s.get("z_km", 0.0)
@@ -118,6 +167,7 @@ def simulate_get(scenario_id: str = "01_full_constellation"):
             p_str = str(orig_sat.get("plane_id", "P1")).replace("P", "")
             plane_num = int(p_str) if p_str.isdigit() else 1
 
+            sat_status = result.get('satellites_status', {}).get(sid, {})
             sats_list.append({
                 "id": sid,
                 "plane": plane_num,
@@ -128,7 +178,11 @@ def simulate_get(scenario_id: str = "01_full_constellation"):
                 "arg_per": 0,
                 "true_anomaly": 0,
                 "sub_lat": round(sub_lat, 4),
-                "sub_lon": round(sub_lon, 4)
+                "sub_lon": round(sub_lon, 4),
+                "temperature_c": sat_status.get("temperature_c", 35.0),
+                "overheated": sat_status.get("overheated", False),
+                "fuel_kg": sat_status.get("fuel_kg", 9.8),
+                "fuel_pct": sat_status.get("fuel_pct", 98.0)
             })
             
         gws_list = []
@@ -178,10 +232,15 @@ def simulate(req: SimulateRequest):
         
         snap0 = result["snapshots"][0] if result.get("snapshots") else {}
         sat_design_map = {sat['id']: sat for sat in scenario.get('design', {}).get('satellites', [])}
+        launch_stage = scenario.get('design', {}).get('launch_stage', 3)
         
         sats_list = []
         for s in snap0.get("satellites", []):
             sid = s["id"]
+            orig_sat = sat_design_map.get(sid, {})
+            batch = orig_sat.get("launch_batch", 1)
+            if batch > launch_stage:
+                continue
             x = s.get("x_km", 0.0)
             y = s.get("y_km", 0.0)
             z = s.get("z_km", 0.0)
@@ -198,6 +257,7 @@ def simulate(req: SimulateRequest):
             p_str = str(orig_sat.get("plane_id", "P1")).replace("P", "")
             plane_num = int(p_str) if p_str.isdigit() else 1
 
+            sat_status = result.get('satellites_status', {}).get(sid, {})
             sats_list.append({
                 "id": sid,
                 "plane": plane_num,
@@ -208,7 +268,11 @@ def simulate(req: SimulateRequest):
                 "arg_per": 0,
                 "true_anomaly": 0,
                 "sub_lat": round(sub_lat, 4),
-                "sub_lon": round(sub_lon, 4)
+                "sub_lon": round(sub_lon, 4),
+                "temperature_c": sat_status.get("temperature_c", 35.0),
+                "overheated": sat_status.get("overheated", False),
+                "fuel_kg": sat_status.get("fuel_kg", 9.8),
+                "fuel_pct": sat_status.get("fuel_pct", 98.0)
             })
             
         gws_list = []
@@ -259,6 +323,34 @@ def export_result(req: SimulateRequest):
         return cosmo_export
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Export error: {str(e)}")
+
+@app.get("/api/compare")
+def compare_presets_get():
+    try:
+        preset_list = list(PRESETS.values())
+        results = []
+        for i, sc in enumerate(preset_list):
+            geometry.validate(sc)
+            res = run_simulation(sc)
+            results.append({
+                "index": i,
+                "meta": sc.get("meta", {"id": f"var_{i+1}", "title": f"Вариант {i+1}"}),
+                "environment": sc.get("environment"),
+                "satellites_count": len(sc.get("design", {}).get("satellites", [])),
+                "launch_stage": sc.get("design", {}).get("launch_stage"),
+                "overall_availability": res["overall_availability"],
+                "all_targets_met": res["all_targets_met"],
+                "client_summaries": res["client_summaries"],
+                "vulnerability": res["vulnerability"]
+            })
+            
+        best_variant = max(results, key=lambda x: x["overall_availability"])
+        return {
+            "variants": results,
+            "best_variant_index": best_variant["index"]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Comparison error: {str(e)}")
 
 @app.post("/api/compare")
 def compare_scenarios(req: CompareRequest):
