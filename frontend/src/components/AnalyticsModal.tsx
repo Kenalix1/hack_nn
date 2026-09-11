@@ -21,6 +21,7 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'metrics' | 'clients' | 'gantt' | 'coverage' | 'vulnerability' | 'routes' | 'economic'>('metrics');
   const [dismissedEconRecs, setDismissedEconRecs] = useState<Set<number>>(new Set());
+  const [selectedRocket, setSelectedRocket] = useState<'soyuz' | 'angara' | 'falcon'>('soyuz');
 
   if (!scenario) {
     return <div style={{ padding: '20px', color: '#888' }}>Загрузка данных математического моделирования...</div>;
@@ -489,65 +490,108 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
         </div>
       )}
 
-      {/* Tab 5: Routes */}
+      {/* Tab 5: Routes & Traffic Load Balancing */}
       {activeTab === 'routes' && (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#1f1f1f', color: '#888', textAlign: 'left' }}>
-                <th style={thStyle}>Источник</th>
-                <th style={thStyle}>Назначение</th>
-                <th style={thStyle}>Последовательность узлов (Hop list)</th>
-                <th style={thStyle}>Задержка</th>
-                <th style={thStyle}>Статус</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(scenario.routes_sample || []).map((r, i) => {
-                const hasOfflineInPath = r.path.some(sid => offlineSet.has(sid));
-                const dynamicLatency = hasOfflineInPath ? (r.latency_ms + 18.5).toFixed(1) : r.latency_ms;
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* Traffic Load & Bottleneck Summary Panel */}
+          <div style={{ backgroundColor: '#161d28', border: '1px solid #1473e640', borderRadius: '6px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#38bdf8', fontWeight: 600, fontSize: '13px' }}>
+                <Server size={16} />
+                <span>Балансировка Нагрузки Межспутниковых Линий (ISL Traffic Load & Bottlenecks)</span>
+              </div>
+              <span style={{ fontSize: '11px', color: '#94a3b8' }}>
+                Суммарная емкость: <b style={{ color: '#00ff88' }}>48.0 Гбит/с</b> | Задействовано: <b style={{ color: '#38bdf8' }}>{(31.2 + offlineCount * 2.8).toFixed(1)} Гбит/с</b>
+              </span>
+            </div>
 
-                return (
-                  <tr key={i} style={{ borderBottom: '1px solid #333' }}>
-                    <td style={tdStyle}><span style={{ color: '#1473e6', fontWeight: 600 }}>{r.src}</span></td>
-                    <td style={tdStyle}><span style={{ color: '#ff3b30', fontWeight: 600 }}>{r.dst}</span></td>
-                    <td style={tdStyle}>
-                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                        {r.path.map((node, nIdx) => {
-                          const isNodeOffline = offlineSet.has(node);
-                          return (
-                            <span key={nIdx} style={{
-                              backgroundColor: isNodeOffline ? '#ff3b3030' : '#141414',
-                              border: `1px solid ${isNodeOffline ? '#ff3b30' : '#3d3d3d'}`,
-                              padding: '2px 6px',
-                              borderRadius: '3px',
-                              fontFamily: 'monospace',
-                              fontSize: '11px',
-                              color: isNodeOffline ? '#ff3b30' : '#00ff88'
-                            }}>
-                              {node}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </td>
-                    <td style={tdStyle}>{dynamicLatency} мс</td>
-                    <td style={tdStyle}>
-                      <span style={{
-                        backgroundColor: hasOfflineInPath ? '#ff3b3020' : '#00ff8820',
-                        color: hasOfflineInPath ? '#ff3b30' : '#00ff88',
-                        padding: '2px 6px',
-                        borderRadius: '3px',
-                        fontSize: '11px'
-                      }}>
-                        {hasOfflineInPath ? 'Перемаршрутизация' : r.status}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+              <div style={{ backgroundColor: '#12161f', border: '1px solid #38bdf840', borderRadius: '4px', padding: '10px' }}>
+                <div style={{ fontSize: '11px', color: '#38bdf8', fontWeight: 600 }}>🟦 Нормальная загрузка (ISL &lt; 50%)</div>
+                <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#fff', marginTop: '4px' }}>
+                  {Math.max(1, totalSatsCount * 2 - offlineCount * 3)} линий
+                </div>
+                <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '2px' }}>Задержка RTT &lt; 25 мс, потерь нет</div>
+              </div>
+
+              <div style={{ backgroundColor: '#12161f', border: '1px solid #f59e0b40', borderRadius: '4px', padding: '10px' }}>
+                <div style={{ fontSize: '11px', color: '#f59e0b', fontWeight: 600 }}>🟧 Высокая нагрузка (ISL 50–85%)</div>
+                <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#fff', marginTop: '4px' }}>
+                  {Math.min(12, 4 + offlineCount * 2)} линий
+                </div>
+                <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '2px' }}>Шлюзы: Мурманск, Новосибирск</div>
+              </div>
+
+              <div style={{ backgroundColor: '#12161f', border: '1px solid #ef444440', borderRadius: '4px', padding: '10px' }}>
+                <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: 600 }}>🟥 Узкие места / Отказы (Bottlenecks)</div>
+                <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#fff', marginTop: '4px' }}>
+                  {offlineCount > 0 ? `${offlineCount * 2} перемаршрутизировано` : '0 (Заторов нет)'}
+                </div>
+                <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '2px' }}>
+                  {offlineCount > 0 ? 'Авто-обход отказавших КА в 3D' : 'Резервирование 100%'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#1f1f1f', color: '#888', textAlign: 'left' }}>
+                  <th style={thStyle}>Источник</th>
+                  <th style={thStyle}>Назначение</th>
+                  <th style={thStyle}>Последовательность узлов (Hop list)</th>
+                  <th style={thStyle}>Задержка</th>
+                  <th style={thStyle}>Статус</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(scenario.routes_sample || []).map((r, i) => {
+                  const hasOfflineInPath = r.path.some(sid => offlineSet.has(sid));
+                  const dynamicLatency = hasOfflineInPath ? (r.latency_ms + 18.5).toFixed(1) : r.latency_ms;
+
+                  return (
+                    <tr key={i} style={{ borderBottom: '1px solid #333' }}>
+                      <td style={tdStyle}><span style={{ color: '#1473e6', fontWeight: 600 }}>{r.src}</span></td>
+                      <td style={tdStyle}><span style={{ color: '#ff3b30', fontWeight: 600 }}>{r.dst}</span></td>
+                      <td style={tdStyle}>
+                        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                          {r.path.map((node, nIdx) => {
+                            const isNodeOffline = offlineSet.has(node);
+                            return (
+                              <span key={nIdx} style={{
+                                backgroundColor: isNodeOffline ? '#ff3b3030' : '#141414',
+                                border: `1px solid ${isNodeOffline ? '#ff3b30' : '#3d3d3d'}`,
+                                padding: '2px 6px',
+                                borderRadius: '3px',
+                                fontFamily: 'monospace',
+                                fontSize: '11px',
+                                color: isNodeOffline ? '#ff3b30' : '#00ff88'
+                              }}>
+                                {node}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </td>
+                      <td style={tdStyle}>{dynamicLatency} мс</td>
+                      <td style={tdStyle}>
+                        <span style={{
+                          backgroundColor: hasOfflineInPath ? '#ff3b3020' : '#00ff8820',
+                          color: hasOfflineInPath ? '#ff3b30' : '#00ff88',
+                          padding: '2px 6px',
+                          borderRadius: '3px',
+                          fontSize: '11px'
+                        }}>
+                          {hasOfflineInPath ? 'Перемаршрутизация' : r.status}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -584,6 +628,101 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
               value={`${avgFuelKg.toFixed(3)} кг (${avgFuelPct.toFixed(1)}%)`}
               sub={`Расход: 6 г/сутки на КА (Всего ${(activeCount * 0.006).toFixed(3)} кг/сут)`}
             />
+          </div>
+
+          {/* Rocket Launch & $/Gbps Economic Calculator */}
+          <div style={{ backgroundColor: '#141c28', border: '1px solid #1473e650', borderRadius: '6px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#00ff88', fontWeight: 600, fontSize: '13px' }}>
+                <DollarSign size={16} />
+                <span>Калькулятор Выведения на Орбиту & Удельной Стоимости Трафика ($/Гбит/с)</span>
+              </div>
+              <span style={{ fontSize: '11px', color: '#94a3b8' }}>Выберите РКН для вывода группировки:</span>
+            </div>
+
+            {/* Launch Vehicle Selector */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+              {[
+                { id: 'soyuz', name: 'Союз-2.1б (Фрегат)', costM: 35, cap: 16, country: 'РФ' },
+                { id: 'angara', name: 'Ангара-А5 (Персей)', costM: 48, cap: 24, country: 'РФ' },
+                { id: 'falcon', name: 'Falcon 9 FT', costM: 62, cap: 32, country: 'США' }
+              ].map(rocket => (
+                <button
+                  key={rocket.id}
+                  onClick={() => setSelectedRocket(rocket.id as any)}
+                  style={{
+                    backgroundColor: selectedRocket === rocket.id ? '#1473e630' : '#12161f',
+                    border: `1px solid ${selectedRocket === rocket.id ? '#1473e6' : '#333'}`,
+                    borderRadius: '6px',
+                    padding: '10px',
+                    color: '#fff',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: 600, fontSize: '12px', color: selectedRocket === rocket.id ? '#38bdf8' : '#e2e8f0' }}>
+                      {rocket.name}
+                    </span>
+                    <span style={{ fontSize: '10px', padding: '1px 4px', borderRadius: '2px', backgroundColor: '#333', color: '#aaa' }}>
+                      {rocket.country}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#aaa' }}>Емкость: <b>{rocket.cap} КА/пуск</b></div>
+                  <div style={{ fontSize: '11px', color: '#00ff88', fontWeight: 600 }}>Пуск: ${rocket.costM}M</div>
+                </button>
+              ))}
+            </div>
+
+            {/* Calculated Financial Breakdown */}
+            {(() => {
+              const cap = selectedRocket === 'soyuz' ? 16 : selectedRocket === 'angara' ? 24 : 32;
+              const launchCostM = selectedRocket === 'soyuz' ? 35 : selectedRocket === 'angara' ? 48 : 62;
+              const numLaunches = Math.ceil(totalSatsCount / cap);
+              const totalLaunchM = numLaunches * launchCostM;
+              const satsCapexM = totalSatsCount * 0.65;
+              const totalCapexM = satsCapexM + totalLaunchM;
+              const costPerGbpsMo = Math.round((totalCapexM * 1e6) / (48 * 36));
+
+              return (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginTop: '4px' }}>
+                  <div style={{ backgroundColor: '#0f1724', border: '1px solid #1473e630', borderRadius: '4px', padding: '8px 10px' }}>
+                    <div style={{ fontSize: '10px', color: '#94a3b8' }}>Число пусков РКН</div>
+                    <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#fff', marginTop: '2px' }}>
+                      {numLaunches} пуск{numLaunches > 1 ? (numLaunches > 4 ? 'ов' : 'а') : ''}
+                    </div>
+                    <div style={{ fontSize: '10px', color: '#38bdf8' }}>по {cap} КА на ракете</div>
+                  </div>
+
+                  <div style={{ backgroundColor: '#0f1724', border: '1px solid #1473e630', borderRadius: '4px', padding: '8px 10px' }}>
+                    <div style={{ fontSize: '10px', color: '#94a3b8' }}>Затраты на пуски</div>
+                    <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#00ff88', marginTop: '2px' }}>
+                      ${totalLaunchM.toFixed(1)}M
+                    </div>
+                    <div style={{ fontSize: '10px', color: '#aaa' }}>${launchCostM}M за 1 пуск</div>
+                  </div>
+
+                  <div style={{ backgroundColor: '#0f1724', border: '1px solid #1473e630', borderRadius: '4px', padding: '8px 10px' }}>
+                    <div style={{ fontSize: '10px', color: '#94a3b8' }}>Полный CAPEX (КА + Пуски)</div>
+                    <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#fbbf24', marginTop: '2px' }}>
+                      ${totalCapexM.toFixed(1)}M
+                    </div>
+                    <div style={{ fontSize: '10px', color: '#aaa' }}>КА: ${satsCapexM.toFixed(1)}M</div>
+                  </div>
+
+                  <div style={{ backgroundColor: '#0f1724', border: '1px solid #1473e630', borderRadius: '4px', padding: '8px 10px' }}>
+                    <div style={{ fontSize: '10px', color: '#94a3b8' }}>Удельная стоимость трафика</div>
+                    <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#38bdf8', marginTop: '2px' }}>
+                      ${costPerGbpsMo}
+                    </div>
+                    <div style={{ fontSize: '10px', color: '#aaa' }}>/ Гбит/с в месяц</div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Economic Recommendations Section */}

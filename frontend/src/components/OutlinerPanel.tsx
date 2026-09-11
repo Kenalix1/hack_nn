@@ -50,15 +50,17 @@ export const OutlinerPanel: React.FC<OutlinerPanelProps> = ({
   return (
     <aside style={{
       width: '290px',
+      maxWidth: 'calc(100vw - 16px)',
       backgroundColor: '#262626',
       borderLeft: '1px solid #383838',
       display: 'flex',
       flexDirection: 'column',
       color: '#e0e0e0',
       fontSize: '12px',
-      height: 'calc(100vh - 44px)',
+      height: 'calc(100vh - 48px)',
       overflowY: 'auto',
-      zIndex: 90
+      zIndex: 90,
+      boxShadow: '-4px 0 16px rgba(0,0,0,0.35)'
     }}>
       {/* Header */}
       <div style={{
@@ -204,6 +206,11 @@ export const OutlinerPanel: React.FC<OutlinerPanelProps> = ({
               label="Зоны покрытия КА (FOVs)"
               checked={!!settings.showCoverageHeatmap}
               onChange={(val) => updateSetting('showCoverageHeatmap', val)}
+            />
+            <ToggleRow
+              label="Загрузка и трафик ISL (%)"
+              checked={!!settings.showTrafficLoad}
+              onChange={(val) => updateSetting('showTrafficLoad', val)}
             />
             <ToggleRow
               label="Дистанции между КА (км)"

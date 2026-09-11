@@ -322,6 +322,8 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
       });
     }
 
+    const onlineSatPosList: THREE.Vector3[] = [];
+
     scenario.satellites.forEach(sat => {
       const planeNum = sat.plane;
       const isOffline = offlineSet.has(sat.id);
@@ -358,6 +360,10 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
       const posKm = new THREE.Vector3(xKm, yKm, zKm);
       satPosMap[sat.id] = pos;
       satPosMapRef.current[sat.id] = pos;
+
+      if (!isOffline) {
+        onlineSatPosList.push(pos);
+      }
 
       const dynTelemetry = getDynamicSatelliteTelemetry(sat, currentTime);
 
@@ -434,22 +440,40 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
         footMesh.position.copy(surfPos);
         footMesh.lookAt(0, 0, 0);
         fovCones.add(footMesh);
-      } else if (settings.showCoverageHeatmap) {
-        // Global coverage footprints layer for constellation
+      }
+
+      // Render 3D Surface Coverage Zones when showCoverageHeatmap is toggled ON
+      if (settings.showCoverageHeatmap) {
         const coneHeight = rThree - earthRadius;
         const coneRadius = coneHeight * Math.tan((35 * Math.PI) / 180);
-        const footGeo = new THREE.RingGeometry(coneRadius * 0.95, coneRadius, 32);
+        
+        // Translucent surface coverage zone disc
+        const footGeo = new THREE.CircleGeometry(coneRadius, 32);
         const footMat = new THREE.MeshBasicMaterial({
           color: isOffline ? settings.offlineSatColor : (settings.fovConeColor || '#00ff88'),
           side: THREE.DoubleSide,
           transparent: true,
-          opacity: isOffline ? 0.35 : 0.25
+          opacity: isOffline ? 0.15 : 0.22,
+          depthWrite: false
         });
         const footMesh = new THREE.Mesh(footGeo, footMat);
         const surfPos = pos.clone().normalize().multiplyScalar(earthRadius * 1.002);
         footMesh.position.copy(surfPos);
         footMesh.lookAt(0, 0, 0);
         fovCones.add(footMesh);
+
+        // Ring border outline for the zone
+        const borderGeo = new THREE.RingGeometry(coneRadius * 0.97, coneRadius, 32);
+        const borderMat = new THREE.MeshBasicMaterial({
+          color: isOffline ? settings.offlineSatColor : (settings.fovConeColor || '#00ff88'),
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: isOffline ? 0.35 : 0.65
+        });
+        const borderMesh = new THREE.Mesh(borderGeo, borderMat);
+        borderMesh.position.copy(surfPos.clone().multiplyScalar(1.0005));
+        borderMesh.lookAt(0, 0, 0);
+        fovCones.add(borderMesh);
       }
     });
 
@@ -544,12 +568,16 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
           const isBroken = itemA.isOffline || itemB.isOffline;
           const isHighLatencyHop = itemA.isHighLatency || itemB.isHighLatency;
 
+          const isTrafficMode = !!settings.showTrafficLoad;
+          const simLoadPct = Math.min(99, Math.max(12, Math.round(35 + Math.sin(currentTime * 0.08 + p * 1.5) * 40 + (isHighLatencyHop ? 35 : 0))));
+          const trafficColor = isBroken ? settings.offlineSatColor : isTrafficMode ? (simLoadPct > 80 ? '#ef4444' : simLoadPct > 55 ? '#f59e0b' : '#38bdf8') : isHighLatencyHop ? settings.highLatencySatColor : (settings.islColor || '#00ff88');
+
           const arcPts = createCurvedArcPoints(itemA.pos, itemB.pos, 16);
           const lineGeo = new THREE.BufferGeometry().setFromPoints(arcPts);
           const lineMat = new THREE.LineBasicMaterial({
-            color: isBroken ? settings.offlineSatColor : isHighLatencyHop ? settings.highLatencySatColor : (settings.islColor || '#00ff88'),
+            color: trafficColor,
             transparent: true,
-            opacity: isBroken ? 0.25 : isHighLatencyHop ? 0.85 : 0.65
+            opacity: isBroken ? 0.25 : isTrafficMode ? 0.9 : isHighLatencyHop ? 0.85 : 0.65
           });
           const line = new THREE.Line(lineGeo, lineMat);
           islLines.add(line);
@@ -558,7 +586,8 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
             const distKm = Math.round(itemA.posKm.distanceTo(itemB.posKm));
             const midPos = new THREE.Vector3().addVectors(itemA.pos, itemB.pos).multiplyScalar(0.508);
             const isFocused = itemA.sat.id === focusedSatelliteId || itemB.sat.id === focusedSatelliteId;
-            const distSprite = createDistanceLabelSprite(`${distKm} км`, isFocused);
+            const labelStr = isTrafficMode ? `${distKm} км | ${simLoadPct}%` : `${distKm} км`;
+            const distSprite = createDistanceLabelSprite(labelStr, isFocused || simLoadPct > 80);
             distSprite.position.copy(midPos);
             labels.add(distSprite);
           }
@@ -594,13 +623,16 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
           if (closestPos && closestPosKm && closestDist < 8.5) {
             const isBroken = itemA.isOffline || targetOffline;
             const isHighLatencyHop = itemA.isHighLatency || targetHighLatency;
+            const isTrafficMode = !!settings.showTrafficLoad;
+            const simLoadPct = Math.min(99, Math.max(15, Math.round(42 + Math.cos(currentTime * 0.06 + i * 2.1) * 38 + (isHighLatencyHop ? 30 : 0))));
+            const trafficColor = isBroken ? settings.offlineSatColor : isTrafficMode ? (simLoadPct > 80 ? '#ef4444' : simLoadPct > 55 ? '#f59e0b' : '#38bdf8') : isHighLatencyHop ? settings.highLatencySatColor : (settings.islColor || '#1473e6');
 
             const arcPts = createCurvedArcPoints(itemA.pos, closestPos, 16);
             const lineGeo = new THREE.BufferGeometry().setFromPoints(arcPts);
             const lineMat = new THREE.LineBasicMaterial({
-              color: isBroken ? settings.offlineSatColor : isHighLatencyHop ? settings.highLatencySatColor : (settings.islColor || '#1473e6'),
+              color: trafficColor,
               transparent: true,
-              opacity: isBroken ? 0.25 : isHighLatencyHop ? 0.75 : 0.5
+              opacity: isBroken ? 0.25 : isTrafficMode ? 0.9 : isHighLatencyHop ? 0.75 : 0.5
             });
             const line = new THREE.Line(lineGeo, lineMat);
             islLines.add(line);
@@ -609,7 +641,8 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
               const distKm = Math.round(itemA.posKm.distanceTo(closestPosKm));
               const midPos = new THREE.Vector3().addVectors(itemA.pos, closestPos).multiplyScalar(0.508);
               const isFocused = itemA.sat.id === focusedSatelliteId;
-              const distSprite = createDistanceLabelSprite(`${distKm} км`, isFocused);
+              const labelStr = isTrafficMode ? `${distKm} км | ${simLoadPct}%` : `${distKm} км`;
+              const distSprite = createDistanceLabelSprite(labelStr, isFocused || simLoadPct > 80);
               distSprite.position.copy(midPos);
               labels.add(distSprite);
             }

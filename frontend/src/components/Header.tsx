@@ -303,6 +303,32 @@ export const Header: React.FC<HeaderProps> = ({
         .hdr-dropdown-item:hover {
           background-color: #262b35;
         }
+
+        @media (max-width: 1024px) {
+          .hdr-container {
+            overflow-x: auto;
+            gap: 12px;
+            padding: 0 10px;
+          }
+          .hdr-section {
+            flex-shrink: 0;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .hdr-container {
+            height: 52px;
+          }
+          .hdr-brand-text {
+            display: none;
+          }
+          .hdr-clock-text {
+            display: none;
+          }
+          .hdr-label {
+            display: none;
+          }
+        }
       `}</style>
 
       {/* Brand & Scenario Selector & Upload */}
@@ -311,7 +337,7 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="hdr-brand-icon">
             <Layers size={16} />
           </div>
-          <span>Система Анализа Группировки</span>
+          <span className="hdr-brand-text">Система Анализа Группировки</span>
         </div>
 
         <div className="hdr-divider" />

@@ -22,14 +22,30 @@ export const DraggableWindow: React.FC<DraggableWindowProps> = ({
   onFocus,
   children
 }) => {
-  const [winState, setWinState] = useState<WindowState>({
-    x: initialPos.x,
-    y: initialPos.y,
-    width: initialPos.width,
-    height: initialPos.height,
-    isMaximized: false,
-    isMinimized: false,
-    zIndex
+  const getClampedPos = () => {
+    const screenW = typeof window !== 'undefined' ? window.innerWidth : 1200;
+    const screenH = typeof window !== 'undefined' ? window.innerHeight : 800;
+    const isMobile = screenW <= 768;
+
+    const w = isMobile ? Math.min(screenW - 16, initialPos.width) : Math.min(screenW - 32, initialPos.width);
+    const h = isMobile ? Math.min(screenH - 70, initialPos.height) : Math.min(screenH - 80, initialPos.height);
+    const x = isMobile ? Math.max(8, (screenW - w) / 2) : Math.min(Math.max(8, initialPos.x), screenW - w - 8);
+    const y = isMobile ? Math.max(50, (screenH - h) / 2) : Math.min(Math.max(50, initialPos.y), screenH - h - 8);
+
+    return { x, y, width: w, height: h };
+  };
+
+  const [winState, setWinState] = useState<WindowState>(() => {
+    const pos = getClampedPos();
+    return {
+      x: pos.x,
+      y: pos.y,
+      width: pos.width,
+      height: pos.height,
+      isMaximized: false,
+      isMinimized: false,
+      zIndex
+    };
   });
 
   const isDraggingRef = useRef(false);
@@ -41,35 +57,65 @@ export const DraggableWindow: React.FC<DraggableWindowProps> = ({
     setWinState(prev => ({ ...prev, zIndex }));
   }, [zIndex]);
 
+  useEffect(() => {
+    const handleResize = () => {
+      setWinState(prev => {
+        const screenW = window.innerWidth;
+        const screenH = window.innerHeight;
+        const newW = Math.min(prev.width, screenW - 16);
+        const newH = Math.min(prev.height, screenH - 60);
+        const newX = Math.min(Math.max(4, prev.x), Math.max(4, screenW - newW - 4));
+        const newY = Math.min(Math.max(48, prev.y), Math.max(48, screenH - newH - 4));
+        return { ...prev, x: newX, y: newY, width: newW, height: newH };
+      });
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   if (!isOpen) return null;
 
-  // Handle Dragging
-  const handleHeaderMouseDown = (e: React.MouseEvent) => {
+  // Handle Mouse / Touch Dragging
+  const startDrag = (clientX: number, clientY: number) => {
     onFocus();
     if (winState.isMaximized) return;
     isDraggingRef.current = true;
     dragOffsetRef.current = {
-      x: e.clientX - winState.x,
-      y: e.clientY - winState.y
+      x: clientX - winState.x,
+      y: clientY - winState.y
     };
 
-    const handleMouseMove = (ev: MouseEvent) => {
+    const handleMove = (evX: number, evY: number) => {
       if (!isDraggingRef.current) return;
-      setWinState(prev => ({
-        ...prev,
-        x: Math.max(0, ev.clientX - dragOffsetRef.current.x),
-        y: Math.max(44, ev.clientY - dragOffsetRef.current.y)
-      }));
+      const screenW = window.innerWidth;
+      const screenH = window.innerHeight;
+      const nextX = Math.min(Math.max(4, evX - dragOffsetRef.current.x), screenW - winState.width - 4);
+      const nextY = Math.min(Math.max(48, evY - dragOffsetRef.current.y), screenH - winState.height - 4);
+      setWinState(prev => ({ ...prev, x: nextX, y: nextY }));
     };
 
-    const handleMouseUp = () => {
+    const onMouseMove = (ev: MouseEvent) => handleMove(ev.clientX, ev.clientY);
+    const onTouchMove = (ev: TouchEvent) => {
+      if (ev.touches[0]) handleMove(ev.touches[0].clientX, ev.touches[0].clientY);
+    };
+
+    const stopDrag = () => {
       isDraggingRef.current = false;
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', stopDrag);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', stopDrag);
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', stopDrag);
+    window.addEventListener('touchmove', onTouchMove, { passive: true });
+    window.addEventListener('touchend', stopDrag);
+  };
+
+  const handleHeaderMouseDown = (e: React.MouseEvent) => startDrag(e.clientX, e.clientY);
+  const handleHeaderTouchStart = (e: React.TouchEvent) => {
+    if (e.touches[0]) startDrag(e.touches[0].clientX, e.touches[0].clientY);
   };
 
   // Handle Resizing
@@ -143,6 +189,7 @@ export const DraggableWindow: React.FC<DraggableWindowProps> = ({
       {/* Window Header / Drag Handle */}
       <div
         onMouseDown={handleHeaderMouseDown}
+        onTouchStart={handleHeaderTouchStart}
         style={{
           height: '36px',
           backgroundColor: '#1f1f1f',

@@ -132,6 +132,7 @@ export interface OutlinerSettings {
   showLabels: boolean;
   showAtmosphere: boolean;
   showCoverageHeatmap?: boolean;
+  showTrafficLoad?: boolean;
   showDistances?: boolean;
   satGlow: boolean;
   satSize: number;
