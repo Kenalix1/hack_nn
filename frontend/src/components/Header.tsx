@@ -81,19 +81,38 @@ export const Header: React.FC<HeaderProps> = ({
           border-bottom: 1px solid #282c34;
           display: flex;
           align-items: center;
-          justify-content: space-between;
+          justify-content: flex-start;
+          gap: 12px;
           padding: 0 16px;
           z-index: 100;
           color: #e2e8f0;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
           font-size: 13px;
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+          overflow-x: auto;
+          overflow-y: hidden;
+          white-space: nowrap;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: thin;
+          scrollbar-color: #1473e6 #16181d;
+        }
+
+        .hdr-container::-webkit-scrollbar {
+          height: 3px;
+        }
+        .hdr-container::-webkit-scrollbar-track {
+          background: #16181d;
+        }
+        .hdr-container::-webkit-scrollbar-thumb {
+          background: #1473e6;
+          border-radius: 2px;
         }
 
         .hdr-section {
           display: flex;
           align-items: center;
           gap: 10px;
+          flex-shrink: 0;
         }
 
         .hdr-brand {
@@ -323,23 +342,8 @@ export const Header: React.FC<HeaderProps> = ({
             display: none;
           }
           .hdr-clock {
-            font-size: 10px;
-            padding: 0 6px;
-          }
-          .hdr-shortcuts-desktop {
-            display: none !important;
-          }
-          .hdr-mobile-trigger {
-            display: inline-flex !important;
-          }
-        }
-
-        @media (min-width: 769px) {
-          .hdr-mobile-trigger {
-            display: none !important;
-          }
-          .hdr-mobile-drawer {
-            display: none !important;
+            font-size: 11px;
+            padding: 0 8px;
           }
         }
       `}</style>
