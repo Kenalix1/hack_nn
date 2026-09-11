@@ -1,21 +1,28 @@
-# Use official lightweight Python image
-FROM python:3.10-slim
+# Stage 1: Build React Frontend
+FROM node:18-alpine AS frontend-builder
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
+RUN npm install
+COPY frontend/ ./
+RUN npm run build
 
-# Prevent python from writing pyc files and buffering stdout
+# Stage 2: Python FastAPI Server
+FROM python:3.10-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# Install dependencies
+# Install python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy project files
+# Copy full application source code
 COPY . /app
 
-# Expose web service port
+# Copy compiled frontend dist from Stage 1
+COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
+
 EXPOSE 8000
 
-# Command to run the application
 CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
