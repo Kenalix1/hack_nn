@@ -6,16 +6,102 @@ import json
 import math
 import networkx as nx
 import numpy as np
+import concurrent.futures
 
 from backend import geometry
 
-def run_simulation(scenario: dict) -> dict:
-    """
-    Executes full time-series simulation for scenario over horizon_s with step_s.
-    Computes topology, routes, outage breakdown, client metrics, and vulnerability stats.
-    Supports arbitrary satellite constellation sizes.
-    """
+def compute_step(scenario: dict, t_s: int, min_elev: float, clients: list, gateway_ids: list):
+    snap = geometry.snapshot(scenario, t_s)
+    
+    G = nx.Graph()
+    active_sats = {sat['id'] for sat in snap['satellites'] if sat['active']}
+    for sat_id in active_sats:
+        G.add_node(sat_id, type='sat')
+        
+    for g in scenario['ground_sites']:
+        G.add_node(g['id'], type=g['role'])
+        
+    for u, v, dist in snap['edges']:
+        G.add_edge(u, v, weight=dist)
+        
+    offline_gateways = {
+        f['gateway_id'] 
+        for f in scenario.get('gateway_outages', []) 
+        if f['start_s'] <= t_s < f['end_s']
+    }
+    active_gateways = [gw_id for gw_id in gateway_ids if gw_id not in offline_gateways]
+    
+    step_routes = {}
+    client_step_data = {}
+    
+    for c in clients:
+        cid = c['id']
+        elevations = snap['elevation_deg'].get(cid, {})
+        visible_sats = [sid for sid, el in elevations.items() if el >= min_elev and sid in active_sats]
+        has_visibility = len(visible_sats) > 0
+        
+        best_path = None
+        best_length = float('inf')
+        
+        if has_visibility and active_gateways:
+            for gw in active_gateways:
+                if G.has_node(cid) and G.has_node(gw) and nx.has_path(G, cid, gw):
+                    try:
+                        p = nx.shortest_path(G, source=cid, target=gw, weight='weight')
+                        intermediate = p[1:-1]
+                        if all(G.nodes[node]['type'] == 'sat' for node in intermediate):
+                            length = nx.path_weight(G, p, weight='weight')
+                            if length < best_length:
+                                best_length = length
+                                best_path = p
+                    except (nx.NetworkXNoPath, nx.NodeNotFound):
+                        pass
+                        
+        if best_path:
+            step_routes[cid] = best_path
+            cause = None
+        else:
+            step_routes[cid] = []
+            if not has_visibility:
+                cause = 'no_visible_sat'
+            elif not active_gateways:
+                cause = 'gateway_outage'
+            else:
+                gateways_have_visibility = False
+                for gw in active_gateways:
+                    if G.has_node(gw) and G.degree(gw) > 0:
+                        gateways_have_visibility = True
+                        break
+                if not gateways_have_visibility:
+                    cause = 'gateway_unreachable'
+                else:
+                    cause = 'isl_disconnected'
+                
+        client_step_data[cid] = {
+            'has_visibility': has_visibility,
+            'best_path': best_path,
+            'best_length': best_length,
+            'cause': cause,
+            'visible_sats': visible_sats
+        }
+        
+    return {
+        't_s': t_s,
+        'snap': snap,
+        'client_step_data': client_step_data,
+        'step_routes': step_routes
+    }
+
+def run_simulation(scenario: dict, settings: dict = None) -> dict:
     geometry.validate(scenario)
+    
+    if settings is None:
+        settings = {
+            'unit_capex_usd': 650000.0,
+            'annual_opex_per_sat_usd': 45000.0,
+            'sla_penalty_per_client_usd': 120000.0,
+            'processing_delay_ms': 10.0
+        }
     
     env = scenario['environment']
     design = scenario['design']
@@ -42,7 +128,7 @@ def run_simulation(scenario: dict) -> dict:
             'client_info': c,
             'visible_steps': 0,
             'connected_steps': 0,
-            'outage_causes': {'no_visible_sat': 0, 'isl_disconnected': 0, 'gateway_unreachable': 0},
+            'outage_causes': {'no_visible_sat': 0, 'isl_disconnected': 0, 'gateway_unreachable': 0, 'gateway_outage': 0},
             'hop_counts': [],
             'path_lengths': [],
             'time_series': []
@@ -52,97 +138,61 @@ def run_simulation(scenario: dict) -> dict:
     
     satellite_usage_count = {}
     
-    for t_s in time_steps:
-        snap = geometry.snapshot(scenario, t_s)
-        snapshots.append(snap)
-        
-        G = nx.Graph()
-        
-        active_sats = {sat['id'] for sat in snap['satellites'] if sat['active']}
-        for sat_id in active_sats:
-            G.add_node(sat_id, type='sat')
-            
-        for g in ground_sites:
-            G.add_node(g['id'], type=g['role'])
-            
-        for u, v, dist in snap['edges']:
-            G.add_edge(u, v, weight=dist)
-            
-        offline_gateways = {
-            f['gateway_id'] 
-            for f in scenario.get('gateway_outages', []) 
-            if f['start_s'] <= t_s < f['end_s']
+    # Run in parallel
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        futures = {
+            executor.submit(compute_step, scenario, t_s, min_elev, clients, gateway_ids): t_s
+            for t_s in time_steps
         }
-        active_gateways = [gw_id for gw_id in gateway_ids if gw_id not in offline_gateways]
         
-        step_routes = {}
+        results = []
+        for future in concurrent.futures.as_completed(futures):
+            results.append(future.result())
+            
+        # Sort results by time step to maintain chronological order
+        results.sort(key=lambda x: x['t_s'])
         
-        for c in clients:
-            cid = c['id']
-            elevations = snap['elevation_deg'].get(cid, {})
-            visible_sats = [sid for sid, el in elevations.items() if el >= min_elev and sid in active_sats]
-            has_visibility = len(visible_sats) > 0
-            
-            if has_visibility:
-                client_stats[cid]['visible_steps'] += 1
-                
-            best_path = None
-            best_length = float('inf')
-            
-            if has_visibility and active_gateways:
-                for gw in active_gateways:
-                    if G.has_node(cid) and G.has_node(gw) and nx.has_path(G, cid, gw):
-                        try:
-                            p = nx.shortest_path(G, source=cid, target=gw, weight='weight')
-                            intermediate = p[1:-1]
-                            if all(G.nodes[node]['type'] == 'sat' for node in intermediate):
-                                length = nx.path_weight(G, p, weight='weight')
-                                if length < best_length:
-                                    best_length = length
-                                    best_path = p
-                        except (nx.NetworkXNoPath, nx.NodeNotFound):
-                            pass
-                            
-            if best_path:
-                client_stats[cid]['connected_steps'] += 1
-                client_stats[cid]['hop_counts'].append(len(best_path) - 1)
-                client_stats[cid]['path_lengths'].append(best_length)
-                step_routes[cid] = best_path
-                
-                for sid in best_path[1:-1]:
-                    satellite_usage_count[sid] = satellite_usage_count.get(sid, 0) + 1
-                    
-                cause = None
-            else:
-                step_routes[cid] = []
-                if not has_visibility:
-                    cause = 'no_visible_sat'
-                elif not active_gateways:
-                    cause = 'gateway_unreachable'
-                else:
-                    cause = 'isl_disconnected'
-                    
-                client_stats[cid]['outage_causes'][cause] += 1
-                
-            client_stats[cid]['time_series'].append({
-                't_s': t_s,
-                'visible_sats': visible_sats,
-                'path': step_routes[cid],
-                'connected': best_path is not None,
-                'cause': cause
-            })
-            
+    for res in results:
+        t_s = res['t_s']
+        snap = res['snap']
+        client_step_data = res['client_step_data']
+        step_routes = res['step_routes']
+        
+        snapshots.append(snap)
         routes_by_time.append({
             't_s': t_s,
             'routes': step_routes
         })
         
+        for cid, data in client_step_data.items():
+            if data['has_visibility']:
+                client_stats[cid]['visible_steps'] += 1
+                
+            best_path = data['best_path']
+            if best_path:
+                client_stats[cid]['connected_steps'] += 1
+                client_stats[cid]['hop_counts'].append(len(best_path) - 1)
+                client_stats[cid]['path_lengths'].append(data['best_length'])
+                
+                for sid in best_path[1:-1]:
+                    satellite_usage_count[sid] = satellite_usage_count.get(sid, 0) + 1
+            else:
+                client_stats[cid]['outage_causes'][data['cause']] += 1
+                
+            client_stats[cid]['time_series'].append({
+                't_s': t_s,
+                'visible_sats': data['visible_sats'],
+                'path': step_routes[cid],
+                'connected': best_path is not None,
+                'cause': data['cause']
+            })
+        
     client_summaries = []
     target_avail = env['target_availability']
     
     for cid, data in client_stats.items():
-        vis_ratio = data['visible_steps'] / total_steps
-        conn_ratio = data['connected_steps'] / total_steps
+        vis_ratio = data['visible_steps'] / max(1, total_steps)
+        conn_ratio = data['connected_steps'] / max(1, total_steps)
         
         outage_intervals = []
         in_outage = False
@@ -209,12 +259,10 @@ def run_simulation(scenario: dict) -> dict:
     
     first_snap_active = len([s for s in snapshots[0]['satellites'] if s['active']]) if snapshots else 0
     
-    # 1. Thermal, Fuel & Sunlight Shadow Calculation per satellite using geometry.sunlight
     sat_status_map = {}
     critical_alerts = []
     planes_map = {p['id']: p for p in design.get('planes', [])}
     
-    # Calculate exact geometry.sunlight map at mid-horizon
     sun_eci = [-1.0, 0.0, 0.0]
     sunlight_map = geometry.sunlight(scenario, horizon / 2, sun_eci)
     
@@ -282,10 +330,9 @@ def run_simulation(scenario: dict) -> dict:
             'is_in_sunlight': is_sunlit
         }
 
-    # 2. Economic Cost-Benefit Analysis & Recommendations
-    unit_capex = 650000.0  # USD per satellite
-    annual_opex_per_sat = 45000.0 # USD/year
-    sla_penalty_per_client = 120000.0 # USD/year if SLA breached
+    unit_capex = settings['unit_capex_usd']
+    annual_opex_per_sat = settings['annual_opex_per_sat_usd']
+    sla_penalty_per_client = settings['sla_penalty_per_client_usd']
     
     unmet_clients_count = len([c for c in client_summaries if not c['target_met']])
     
@@ -296,9 +343,8 @@ def run_simulation(scenario: dict) -> dict:
     
     economic_recommendations = []
     
-    # Issue highly profitable options focusing on maximum cost savings ($50k re-phasing vs $3.2M launch)
     if overall_availability < 0.90 or unmet_clients_count > 0 or len(critical_alerts) > 0:
-        saved_penalties = annual_sla_penalties if annual_sla_penalties > 0 else 240000.0
+        saved_penalties = annual_sla_penalties if annual_sla_penalties > 0 else (sla_penalty_per_client * 2)
         economic_recommendations.append(
             f"💰 [САМЫЙ ВЫГОДНЫЙ ВАРИАНТ]: Динамическая перенастройка сетки ISL и перефазирование орбит (+15°). Затраты: $50,000 (расход ксенона). Экономия: ${saved_penalties + 2600000:,.0f} за счет устранения штрафов SLA без покупки новых КА."
         )

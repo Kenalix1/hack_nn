@@ -98,6 +98,7 @@ export const App: React.FC = () => {
     initialSaved?.currentOutages || []
   );
   const [selectedSatellite, setSelectedSatellite] = useState<Satellite | null>(null);
+  const [criticalSatellites, setCriticalSatellites] = useState<string[]>([]);
 
   // Outliner Settings State (Deep merged with defaults to avoid missing properties from old localStorage)
   const [outlinerSettings, setOutlinerSettings] = useState<OutlinerSettings>(() => {
@@ -273,40 +274,40 @@ export const App: React.FC = () => {
 
   // Upload Custom Scenario JSON
   const handleUploadScenarioJson = async (scenarioJson: any) => {
-    addLog(`Обработка загруженного JSON сценария: ${scenarioJson.meta?.title || 'Сценарий'}...`, 'info');
-    setIsSimulating(true);
-    try {
-      const res = await fetch('/api/simulate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scenario: scenarioJson })
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setScenarioData(data);
-        setCurrentRawScenario(scenarioJson);
-        const title = scenarioJson.meta?.title || 'Загруженный Сценарий';
-        
-        setScenarios(prev => {
-          const scId = scenarioJson.meta?.id || 'custom_upload';
-          if (!prev.some(s => s.id === scId)) {
-            return [...prev, { id: scId, title }];
-          }
-          return prev;
-        });
-
-        addLog(`Пользовательский JSON успешно загружен! Карта перестроена (${data.satellites?.length || 0} спутников).`, 'success');
-        openWindow('analytics');
-      } else {
-        const err = await res.json();
-        addLog(`Ошибка валидации JSON: ${err.detail || 'Неверный формат cosmo-A-1.0'}`, 'error');
+    addLog(`Загрузка базового сценария для Монте-Карло анализа...`, 'info');
+    setCurrentRawScenario(scenarioJson);
+    const title = scenarioJson.meta?.title || 'Загруженный Сценарий';
+    
+    setScenarios(prev => {
+      const scId = scenarioJson.meta?.id || 'custom_upload';
+      if (!prev.some(s => s.id === scId)) {
+        return [...prev, { id: scId, title }];
       }
-    } catch (e) {
-      addLog(`Не удалось отправить JSON сценарий на сервер`, 'error');
-    } finally {
-      setIsSimulating(false);
+      return prev;
+    });
+
+    openWindow('compare');
+    addLog(`Запущен расчет комбинаций Монте-Карло... Ожидайте результаты в таблице.`, 'success');
+  };
+
+  const handleVisualizeScenario = (rawScenario: any, simResult: any) => {
+    addLog(`Анализ сценария "${rawScenario.meta?.title}" загружается на 3D карту...`, 'success');
+    setCurrentRawScenario(rawScenario);
+    
+    const hasValidSimResult = simResult && simResult.satellites && simResult.satellites.length > 0 && simResult.gateways;
+    if (hasValidSimResult) {
+        setScenarioData(simResult);
     }
+    
+    // Set specific outages for visualization if they exist in this variant
+    const failures = rawScenario.failures || [];
+    setCurrentOutages(failures);
+    
+    if (!hasValidSimResult) {
+        adaptSimulationWithOutages(failures);
+    }
+    
+    openWindow('analytics');
   };
 
   // Build & Run Custom Walker Delta Configuration
@@ -470,19 +471,41 @@ export const App: React.FC = () => {
 
   // Export Full Simulation Results JSON
   const handleExportResultsJson = () => {
-    if (!scenarioData) {
-      addLog(`Нет данных симуляции для экспорта`, 'warning');
+    if (!scenarioData || !scenarioData.raw_scenario || !scenarioData.simulation_result) {
+      addLog(`Нет полных данных симуляции для экспорта`, 'warning');
       return;
     }
-    const jsonStr = JSON.stringify(scenarioData, null, 2);
+    
+    // Construct the cosmo-A-result-1.0 format
+    const routes_list = [];
+    if (scenarioData.simulation_result.routes_by_time) {
+        for (const step_item of scenarioData.simulation_result.routes_by_time) {
+            const t_s = step_item.t_s;
+            for (const [client_id, path] of Object.entries(step_item.routes || {})) {
+                routes_list.push({
+                    t_s: t_s,
+                    client_id: client_id,
+                    path: path
+                });
+            }
+        }
+    }
+    
+    const cosmoResult = {
+        schema_version: 'cosmo-A-result-1.0',
+        effective_scenario: scenarioData.raw_scenario,
+        routes: routes_list
+    };
+
+    const jsonStr = JSON.stringify(cosmoResult, null, 2);
     const blob = new Blob([jsonStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `simulation_results_${activeScenarioId}_export.json`;
+    a.download = `cosmo-A-result-1.0_${activeScenarioId}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    addLog(`Итоговые результаты моделирования экспортированы в JSON`, 'success');
+    addLog(`Итоговые результаты моделирования экспортированы в формате cosmo-A-result-1.0`, 'success');
   };
 
   // Satellite Outages Handlers & Fly-to Focus
@@ -747,6 +770,7 @@ export const App: React.FC = () => {
             settings={outlinerSettings}
             currentTime={currentTimeSeconds}
             outages={currentOutages}
+            criticalSatellites={criticalSatellites}
             focusedSatelliteId={focusedSatelliteId}
             onSelectSatellite={handleSelectSatellite}
           />
@@ -813,14 +837,20 @@ export const App: React.FC = () => {
         {/* Windows: Project Compare */}
         <DraggableWindow
           id="compare"
-          title="Сравнение Проектов & Сценариев"
+          title="Панель Монте-Карло (Big Data Analysis)"
           isOpen={windows.compare.isOpen}
           onClose={() => closeWindow('compare')}
           zIndex={windows.compare.zIndex}
           onFocus={() => focusWindow('compare')}
-          initialPos={{ x: 260, y: 120, width: 720, height: 420 }}
+          initialPos={{ x: 100, y: 100, width: 900, height: 600 }}
         >
-          <CompareModal onOpenConfigurator={() => openWindow('configurator')} />
+          <CompareModal 
+            onOpenConfigurator={() => openWindow('configurator')}
+            baseScenario={currentRawScenario}
+            onVisualizeScenario={handleVisualizeScenario}
+            onClose={() => closeWindow('compare')}
+            onSetCriticalSatellites={setCriticalSatellites}
+          />
         </DraggableWindow>
 
         {/* Windows: Emergency Simulation & Economic Recommendations */}
