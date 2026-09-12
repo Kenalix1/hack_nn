@@ -221,9 +221,26 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
     window.addEventListener('resize', updateSize);
 
     let animId: number;
+    const tempVec = new THREE.Vector3();
     const animate = () => {
       animId = requestAnimationFrame(animate);
       controls.update();
+      
+      // Update label opacity based on visibility (front vs back of Earth)
+      const camPos = camera.position.clone().normalize();
+      groupsRef.current.labels.children.forEach(label => {
+        label.getWorldPosition(tempVec);
+        tempVec.normalize();
+        const dot = tempVec.dot(camPos);
+        const sprite = label as THREE.Sprite;
+        
+        let op = 1.0;
+        if (dot < 0.0) op = 0.15;
+        else if (dot < 0.2) op = 0.15 + (0.85) * (dot / 0.2);
+        
+        sprite.material.opacity = op;
+      });
+
       renderer.render(scene, camera);
     };
     animate();
