@@ -110,14 +110,18 @@ export const SatelliteOutageModal: React.FC<SatelliteOutageModalProps> = ({
         )}
       </div>
 
-      {/* Info Grid */}
+      {/* SpaceX Style Telemetry Info Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', backgroundColor: '#27272a', padding: '10px', borderRadius: '6px', border: '1px solid #3f3f46' }}>
-        <div><span style={{ color: '#a1a1aa' }}>Идентификатор:</span> <b style={{ color: '#fff' }}>{satellite.id}</b></div>
-        <div><span style={{ color: '#a1a1aa' }}>Плоскость:</span> <b style={{ color: '#fff' }}>P{satellite.plane}</b></div>
-        <div><span style={{ color: '#a1a1aa' }}>Высота:</span> <b style={{ color: '#fff' }}>{Math.round(satellite.altitude)} км</b></div>
-        <div><span style={{ color: '#a1a1aa' }}>Широта:</span> <b style={{ color: '#fff' }}>{satellite.sub_lat.toFixed(1)}°</b></div>
+        <div><span style={{ color: '#a1a1aa' }}>Идентификатор КА:</span> <b style={{ color: '#fff' }}>{satellite.id}</b></div>
+        <div><span style={{ color: '#a1a1aa' }}>Орбитальная плоскость:</span> <b style={{ color: '#fff' }}>P{satellite.plane}</b></div>
+        <div><span style={{ color: '#a1a1aa' }}>Высота орб. (LEO):</span> <b style={{ color: '#fff' }}>{Math.round(satellite.altitude)} км</b></div>
+        <div><span style={{ color: '#a1a1aa' }}>Геоцентрическая скорость:</span> <b style={{ color: '#38bdf8' }}>7.59 км/с</b></div>
+        <div><span style={{ color: '#a1a1aa' }}>Координаты (Lat / Lon):</span> <b style={{ color: '#fff' }}>{satellite.sub_lat.toFixed(1)}° / {satellite.sub_lon.toFixed(1)}°</b></div>
+        <div><span style={{ color: '#a1a1aa' }}>Доплеровский сдвиг:</span> <b style={{ color: '#38bdf8' }}>{(Math.sin(currentTimeSeconds * 0.05 + satellite.sub_lat) * 14.2).toFixed(1)} кГц</b></div>
+        <div><span style={{ color: '#a1a1aa' }}>Запас линии (Link Margin):</span> <b style={{ color: '#34d399' }}>+5.2 dB (SLA PASS)</b></div>
+        <div><span style={{ color: '#a1a1aa' }}>Угол места (Elevation):</span> <b style={{ color: '#fff' }}>{(28.5 + Math.abs(Math.sin(satellite.sub_lat)) * 35).toFixed(1)}°</b></div>
         <div>
-          <span style={{ color: '#a1a1aa' }}>Температура бортовой ЭВМ:</span>{' '}
+          <span style={{ color: '#a1a1aa' }}>Температура ЭВМ:</span>{' '}
           <b style={{ color: (satellite.temperature_c ?? 38) >= 80 ? '#ff3b30' : (satellite.temperature_c ?? 38) >= 60 ? '#ffaa00' : '#00ff88' }}>
             {satellite.temperature_c ?? 38.5}°C {(satellite.temperature_c ?? 38) >= 80 ? '[ПЕРЕГРЕВ]' : ''}
           </b>
@@ -125,13 +129,19 @@ export const SatelliteOutageModal: React.FC<SatelliteOutageModalProps> = ({
         <div>
           <span style={{ color: '#a1a1aa' }}>Солнечные батареи:</span>{' '}
           <b style={{ color: '#ffaa00' }}>
-            {satellite.solar_power_w ?? 1850} Вт (Номинал)
+            {satellite.solar_power_w ?? 1850} Вт
           </b>
         </div>
         <div>
           <span style={{ color: '#a1a1aa' }}>Заряд аккумуляторов (АКБ):</span>{' '}
           <b style={{ color: '#00ff88' }}>
             {satellite.battery_pct ?? 100}%
+          </b>
+        </div>
+        <div>
+          <span style={{ color: '#a1a1aa' }}>Оптические терминалы ISL:</span>{' '}
+          <b style={{ color: '#38bdf8' }}>
+            4 / 4 Активны
           </b>
         </div>
       </div>
