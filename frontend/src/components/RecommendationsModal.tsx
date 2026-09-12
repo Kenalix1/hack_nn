@@ -154,7 +154,7 @@ export const RecommendationsModal: React.FC<RecommendationsModalProps> = ({
     const totalAppearances = top.reduce((acc, s) => acc + s.route_appearances, 0);
 
     return top.slice(0, 5).map(s => {
-      const satObj = scenario.satellites.find(sat => sat.id === s.satellite_id);
+      const satObj = (scenario.satellites || []).find(sat => sat.id === s.satellite_id);
       return {
         id: s.satellite_id,
         planeId: satObj ? `P${satObj.plane}` : 'P1',

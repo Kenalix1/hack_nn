@@ -171,7 +171,12 @@ export const App: React.FC = () => {
     delete savedWins.mass_sim;
     return {
       ...defaultWindows,
-      ...savedWins
+      ...savedWins,
+      // Ensure heavy analytical windows start closed on page load to prevent rendering crashes on null scenarioData
+      analytics: { isOpen: false, zIndex: 10 },
+      compare: { isOpen: false, zIndex: 12 },
+      recommendations: { isOpen: false, zIndex: 16 },
+      monteCarlo: { isOpen: false, zIndex: 14 }
     };
   });
   const [topZ, setTopZ] = useState<number>(20);
@@ -321,7 +326,7 @@ export const App: React.FC = () => {
     addLog(`Загрузка пользовательского сценария...`, 'info');
     setCurrentRawScenario(scenarioJson);
     const title = scenarioJson.meta?.title || 'Загруженный Сценарий';
-    const scId = scenarioJson.meta?.id || 'custom_upload';
+    const scId = scenarioJson.meta?.id || 'custom_upload_' + Date.now();
 
     setScenarios(prev => {
       if (!prev.some(s => s.id === scId)) {
@@ -330,11 +335,11 @@ export const App: React.FC = () => {
       return prev;
     });
     setActiveScenarioId(scId);
+    setHasRunMonteCarlo(false);
 
-    // Запускаем реальную симуляцию через API
-    setIsSimulating(true);
+    // Быстрый предпросмотр группировки без запуска расчетов
     try {
-      const res = await fetch('/api/simulate', {
+      const res = await fetch('/api/scenarios/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ scenario: scenarioJson })
@@ -344,19 +349,14 @@ export const App: React.FC = () => {
         setScenarioData(data);
         if (data.raw_scenario) setCurrentRawScenario(data.raw_scenario);
         addLog(
-          `Расчёт завершён для "${title}": ${data.satellites?.length || 0} КА, ` +
-          `доступность ${((data.simulation_result?.overall_availability || 0) * 100).toFixed(2)}%`,
+          `Сценарий "${title}" успешно добавлен (${data.satellites?.length || 0} КА). Расчеты не запускались.`,
           'success'
         );
-        openWindow('analytics');
       } else {
-        const err = await res.json().catch(() => ({ detail: res.statusText }));
-        addLog(`Ошибка симуляции: ${err.detail || 'Неизвестная ошибка'}`, 'error');
+        addLog(`Сценарий добавлен. Для запуска расчета используйте симуляцию Монте-Карло.`, 'info');
       }
     } catch (e) {
-      addLog(`Ошибка сети при симуляции: ${String(e)}`, 'error');
-    } finally {
-      setIsSimulating(false);
+      addLog(`Сценарий добавлен. Для запуска расчета используйте симуляцию Монте-Карло.`, 'info');
     }
   };
 
@@ -467,8 +467,11 @@ export const App: React.FC = () => {
       gateway_outages: []
     };
 
+    setHasRunMonteCarlo(false);
+    setCurrentRawScenario(customScenarioSchema);
+
     try {
-      const res = await fetch('/api/simulate', {
+      const res = await fetch('/api/scenarios/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ scenario: customScenarioSchema })
@@ -477,9 +480,7 @@ export const App: React.FC = () => {
       if (res.ok) {
         const data = await res.json();
         setScenarioData(data);
-        setCurrentRawScenario(customScenarioSchema);
-        addLog(`Карта и расчет новой группировки зафиксированы! Общая доступность ${((data.simulation_result?.overall_availability || 0.99) * 100).toFixed(2)}%`, 'success');
-        openWindow('analytics');
+        addLog(`Новая группировка "${customScenarioSchema.meta.title}" сформирована (${data.satellites?.length || satellites3DList.length} КА). Расчеты не запускались.`, 'success');
       } else {
         setScenarioData({
           scenario_id: 'custom_config',
@@ -491,11 +492,9 @@ export const App: React.FC = () => {
             { id: 'C65', name: 'Центральный Шлюз C65', lat: 55.75, lon: 37.61, type: 'gateway' },
             { id: 'Murmansk', name: 'Мурманск', lat: 68.97, lon: 33.08, type: 'gateway' }
           ],
-          routes_sample: [
-            { src: 'C65', dst: 'Murmansk', path: ['C65', 'S01', 'S02', 'Murmansk'], latency_ms: 36.2, status: 'АКТИВЕН' }
-          ]
+          routes_sample: []
         });
-        addLog(`3D-карта перестроена (${satellites3DList.length} аппаратов)`, 'info');
+        addLog(`3D-карта перестроена (${satellites3DList.length} аппаратов). Расчет ожидает запуска.`, 'info');
       }
     } catch (e) {
       setScenarioData({
@@ -508,11 +507,9 @@ export const App: React.FC = () => {
           { id: 'C65', name: 'Центральный Шлюз C65', lat: 55.75, lon: 37.61, type: 'gateway' },
           { id: 'Murmansk', name: 'Мурманск', lat: 68.97, lon: 33.08, type: 'gateway' }
         ],
-        routes_sample: [
-          { src: 'C65', dst: 'Murmansk', path: ['C65', 'S01', 'S02', 'Murmansk'], latency_ms: 36.2, status: 'АКТИВЕН' }
-        ]
+        routes_sample: []
       });
-      addLog(`3D-карта перестроена под конфигурацию (${satellites3DList.length} аппаратов)`, 'info');
+      addLog(`3D-карта перестроена (${satellites3DList.length} аппаратов). Расчет ожидает запуска.`, 'info');
     } finally {
       setIsSimulating(false);
     }
@@ -639,8 +636,13 @@ export const App: React.FC = () => {
           { id: 'C70', name: 'Шлюз C70', role: 'gateway', lat_deg: 59.93, lon_deg: 30.31 },
           { id: 'Murmansk', name: 'Мурманск (Клиент)', role: 'client', lat_deg: 68.97, lon_deg: 33.08 },
           { id: 'Pechora', name: 'Печора (Клиент)', role: 'client', lat_deg: 65.14, lon_deg: 57.22 }
-        ]
+        ],
+        failures: [],
+        gateway_outages: []
       };
+
+      if (!baseScenario.gateway_outages) baseScenario.gateway_outages = [];
+      if (!baseScenario.failures) baseScenario.failures = [];
 
       // Dynamically recalculate geometry & network topology for plane RAAN and Phase offsets
       if (baseScenario.design?.planes) {
@@ -853,8 +855,13 @@ export const App: React.FC = () => {
           { id: 'C70', name: 'Шлюз C70', role: 'gateway', lat_deg: 59.93, lon_deg: 30.31 },
           { id: 'Murmansk', name: 'Мурманск (Клиент)', role: 'client', lat_deg: 68.97, lon_deg: 33.08 },
           { id: 'Pechora', name: 'Печора (Клиент)', role: 'client', lat_deg: 65.14, lon_deg: 57.22 }
-        ]
+        ],
+        failures: [],
+        gateway_outages: []
       };
+
+      if (!baseScenario.gateway_outages) baseScenario.gateway_outages = [];
+      if (!baseScenario.failures) baseScenario.failures = [];
 
       baseScenario.failures = currentOutages.map(o => ({
         satellite_id: o.satellite_id,
@@ -872,7 +879,8 @@ export const App: React.FC = () => {
           launch_delay_days: params.launch_delay_days,
           num_samples: params.num_samples,
           spare_satellites: params.spare_satellites,
-          sla_penalty_per_client_usd: params.sla_penalty_per_client_usd
+          sla_penalty_per_client_usd: params.sla_penalty_per_client_usd,
+          run_monte_carlo: true
         })
       });
 
@@ -896,12 +904,14 @@ export const App: React.FC = () => {
         openWindow('analytics');
       } else {
         completeProgressTracking(false);
-        addLog(`Ошибка при вычислении симуляции`, 'error');
+        const errJson = await res.json().catch(() => ({}));
+        const msg = errJson.detail || res.statusText || `Код ${res.status}`;
+        addLog(`Ошибка при вычислении симуляции: ${msg}`, 'error');
       }
-    } catch (e) {
+    } catch (e: any) {
       completeProgressTracking(false);
       console.error(e);
-      addLog(`Ошибка при расчете симуляции Монте-Карло`, 'error');
+      addLog(`Ошибка при расчете симуляции Монте-Карло: ${e?.message || e}`, 'error');
     } finally {
       setIsSimulating(false);
     }

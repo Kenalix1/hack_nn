@@ -25,6 +25,11 @@ services:
       DATABASE_URL: postgresql://postgres:password@db:5432/cosmohack
     ports:
       - "8000:8000"
+    volumes:
+      - ./backend:/app/backend
+      - ./frontend/dist:/app/frontend/dist
+      - ./data:/app/data
+      - ./cosmohack.db:/app/cosmohack.db
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/scenarios')"]

@@ -117,14 +117,18 @@ export const TwoDMapCanvas: React.FC<TwoDMapCanvasProps> = ({
     return { lat: latDeg, lon: lonDeg };
   };
 
-  // Canvas render loop
-  useEffect(() => {
+  const redrawRequestedRef = useRef(false);
+
+  // Canvas render function
+  const renderScene = useCallback(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
 
-    canvas.width = container.clientWidth || 1000;
-    canvas.height = container.clientHeight || 700;
+    if (canvas.width !== (container.clientWidth || 1000) || canvas.height !== (container.clientHeight || 700)) {
+      canvas.width = container.clientWidth || 1000;
+      canvas.height = container.clientHeight || 700;
+    }
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -234,17 +238,12 @@ export const TwoDMapCanvas: React.FC<TwoDMapCanvasProps> = ({
           img.crossOrigin = 'anonymous';
           img.src = tileUrl;
           img.onload = () => {
-            if (canvasRef.current) {
-              const currentCtx = canvasRef.current.getContext('2d');
-              if (currentCtx) {
-                currentCtx.filter = tileStyle === 'bw_dark'
-                  ? 'grayscale(100%) invert(92%) contrast(140%)'
-                  : tileStyle === 'bw_light'
-                  ? 'grayscale(100%) contrast(120%)'
-                  : 'none';
-                currentCtx.drawImage(img!, screenX, screenY, tileSize, tileSize);
-                currentCtx.filter = 'none';
-              }
+            if (!redrawRequestedRef.current) {
+              redrawRequestedRef.current = true;
+              requestAnimationFrame(() => {
+                redrawRequestedRef.current = false;
+                renderScene();
+              });
             }
           };
           tileCacheRef.current[tileUrl] = img;
@@ -441,6 +440,21 @@ export const TwoDMapCanvas: React.FC<TwoDMapCanvasProps> = ({
 
   }, [scenario, outages, currentTime, settings, tileStyle, showISL, showFOVs, showTracks, showGateways, showSatellites, showLabels, center, zoom, lonToX, latToY]);
 
+  useEffect(() => {
+    renderScene();
+  }, [renderScene]);
+
+  // Real-time animation loop so satellites glide smoothly on 2D map
+  useEffect(() => {
+    let animId: number;
+    const loop = () => {
+      renderScene();
+      animId = requestAnimationFrame(loop);
+    };
+    animId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(animId);
+  }, [renderScene]);
+
   // Click handler
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -456,7 +470,7 @@ export const TwoDMapCanvas: React.FC<TwoDMapCanvasProps> = ({
     const centerY = latToY(center.lat, currentZoom);
 
     // Satellites
-    for (const sat of scenario.satellites) {
+    for (const sat of (scenario?.satellites || [])) {
       const pt = computeSubPoint(sat, currentTime);
       const px = lonToX(pt.lon, currentZoom);
       const py = latToY(pt.lat, currentZoom);

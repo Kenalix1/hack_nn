@@ -20,7 +20,17 @@ from backend.monte_carlo import analyze_combinations
 
 models.Base.metadata.create_all(bind=engine)
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="CosmoHack 2026 - Constellation Resiliency Service")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 BASE_DIR = Path(__file__).parent.parent
 
@@ -67,6 +77,7 @@ class SimulateRequest(BaseModel):
     num_samples: Optional[int] = None
     spare_satellites: Optional[int] = None
     sla_penalty_per_client_usd: Optional[float] = None
+    run_monte_carlo: Optional[bool] = False
     
 class CompareRequest(BaseModel):
     scenarios: List[Dict[str, Any]]
@@ -94,6 +105,7 @@ def api_get_settings(db: Session = Depends(get_db)):
     }
 
 @app.put("/api/settings")
+@app.post("/api/settings")
 def api_update_settings(updates: SettingsUpdate, db: Session = Depends(get_db)):
     updated_dict = {k: v for k, v in updates.dict().items() if v is not None}
     settings = crud.update_settings(db, updated_dict)
@@ -184,21 +196,24 @@ def simulate(req: SimulateRequest, db: Session = Depends(get_db)):
             
         geometry.validate(scenario)
         
-        settings_db = crud.get_settings(db)
+        try:
+            settings_db = crud.get_settings(db) if db and hasattr(db, "query") else None
+        except Exception:
+            settings_db = None
         
         # Monte Carlo & simulation settings
-        p_fail = req.failure_probability if req.failure_probability is not None else (settings_db.failure_probability or 0.01)
-        launch_cost = req.emergency_launch_cost_usd if req.emergency_launch_cost_usd is not None else (settings_db.emergency_launch_cost_usd or 15000000.0)
-        launch_delay = req.launch_delay_days if req.launch_delay_days is not None else (settings_db.launch_delay_days or 14)
+        p_fail = req.failure_probability if req.failure_probability is not None else (settings_db.failure_probability if settings_db else 0.01)
+        launch_cost = req.emergency_launch_cost_usd if req.emergency_launch_cost_usd is not None else (settings_db.emergency_launch_cost_usd if settings_db else 15000000.0)
+        launch_delay = req.launch_delay_days if req.launch_delay_days is not None else (settings_db.launch_delay_days if settings_db else 14)
         num_samples = req.num_samples if req.num_samples is not None else 12
         spare_sats = req.spare_satellites if req.spare_satellites is not None else 2
-        sla_penalty = req.sla_penalty_per_client_usd if req.sla_penalty_per_client_usd is not None else settings_db.sla_penalty_per_client_usd
+        sla_penalty = req.sla_penalty_per_client_usd if req.sla_penalty_per_client_usd is not None else (settings_db.sla_penalty_per_client_usd if settings_db else 120000.0)
         
         settings_dict = {
-            'unit_capex_usd': settings_db.unit_capex_usd,
-            'annual_opex_per_sat_usd': settings_db.annual_opex_per_sat_usd,
+            'unit_capex_usd': settings_db.unit_capex_usd if settings_db else 650000.0,
+            'annual_opex_per_sat_usd': settings_db.annual_opex_per_sat_usd if settings_db else 45000.0,
             'sla_penalty_per_client_usd': sla_penalty,
-            'processing_delay_ms': settings_db.processing_delay_ms,
+            'processing_delay_ms': settings_db.processing_delay_ms if settings_db else 5.0,
             'failure_probability': p_fail,
             'emergency_launch_cost_usd': launch_cost,
             'launch_delay_days': launch_delay,
@@ -208,36 +223,40 @@ def simulate(req: SimulateRequest, db: Session = Depends(get_db)):
         
         result = run_simulation(scenario, settings_dict)
         
-        # Run integrated Monte Carlo analysis
-        mc_analysis = analyze_combinations(scenario, settings_dict)
-        result["monte_carlo"] = mc_analysis
-        
-        # Enrich economic recommendations with Monte Carlo risk findings
-        mc_summary = mc_analysis.get("summary", {})
-        if mc_summary.get("expected_risk_cost", 0) > 0:
-            exp_risk_m = mc_summary["expected_risk_cost"] / 1e6
-            result["economic_analysis"]["economic_recommendations"].insert(0,
-                f"[МОНТЕ-КАРЛО СТРЕСС-ТЕСТ]: Ожидаемый финансовый риск аварий: ${exp_risk_m:.2f}M/год (при суточном P_fail={p_fail*100:.1f}%, цене пуска ${launch_cost/1e6:.1f}M и задержке {launch_delay} дн)."
-            )
-        if spare_sats > 0:
-            result["economic_analysis"]["economic_recommendations"].append(
-                f"[ОРБИТАЛЬНЫЙ РЕЗЕРВ ({spare_sats} КА)]: Позволяет мгновенно парировать единичные отказы без задержки в {launch_delay} дней и экономит до ${launch_cost/1e6:.1f}M на каждом предотвращенном пуске."
-            )
+        # Run integrated Monte Carlo analysis ONLY IF explicitly requested
+        if req.run_monte_carlo:
+            mc_analysis = analyze_combinations(scenario, settings_dict, base_result=result)
+            result["monte_carlo"] = mc_analysis
+            
+            # Enrich economic recommendations with Monte Carlo risk findings
+            mc_summary = mc_analysis.get("summary", {})
+            if mc_summary.get("expected_risk_cost", 0) > 0:
+                exp_risk_m = mc_summary["expected_risk_cost"] / 1e6
+                result["economic_analysis"]["economic_recommendations"].insert(0,
+                    f"[МОНТЕ-КАРЛО СТРЕСС-ТЕСТ]: Ожидаемый финансовый риск аварий: ${exp_risk_m:.2f}M/год (при суточном P_fail={p_fail*100:.1f}%, цене пуска ${launch_cost/1e6:.1f}M и задержке {launch_delay} дн)."
+                )
+            if spare_sats > 0:
+                result["economic_analysis"]["economic_recommendations"].append(
+                    f"[ОРБИТАЛЬНЫЙ РЕЗЕРВ ({spare_sats} КА)]: Позволяет мгновенно парировать единичные отказы без задержки в {launch_delay} дней и экономит до ${launch_cost/1e6:.1f}M на каждом предотвращенном пуске."
+                )
             
         title = scenario.get("meta", {}).get("title", "Пользовательский Сценарий")
         scenario_id = scenario.get("meta", {}).get("id", title.replace(" ", "_").lower())
         
-        # Save to DB
-        crud.create_scenario_log(
-            db=db,
-            log_id=scenario_id,
-            title=title,
-            raw_scenario=scenario,
-            simulation_result=result,
-            overall_availability=result["overall_availability"],
-            all_targets_met=result["all_targets_met"],
-            total_annual_cost_usd=result["economic_analysis"]["total_annual_cost_usd"]
-        )
+        # Save to DB (resilient fallback)
+        try:
+            crud.create_scenario_log(
+                db=db,
+                log_id=scenario_id,
+                title=title,
+                raw_scenario=scenario,
+                simulation_result=result,
+                overall_availability=result["overall_availability"],
+                all_targets_met=result["all_targets_met"],
+                total_annual_cost_usd=result["economic_analysis"]["total_annual_cost_usd"]
+            )
+        except Exception as db_err:
+            print(f"Warning: Failed to save scenario log to DB: {db_err}")
         
         # Rest of response formatting
         snap0 = result["snapshots"][0] if result.get("snapshots") else {}
@@ -378,8 +397,111 @@ def simulate_get(
         launch_delay_days=launch_delay_days,
         num_samples=num_samples,
         spare_satellites=spare_satellites,
-        sla_penalty_per_client_usd=sla_penalty_per_client_usd
+        sla_penalty_per_client_usd=sla_penalty_per_client_usd,
+        run_monte_carlo=False
     ), db)
+
+class ScenarioPreviewRequest(BaseModel):
+    scenario: Optional[Dict[str, Any]] = None
+    scenario_id: Optional[str] = None
+
+@app.post("/api/scenarios/preview")
+def preview_scenario(req: ScenarioPreviewRequest):
+    scenario = req.scenario
+    if not scenario and req.scenario_id:
+        clean_id = req.scenario_id.replace('.json', '')
+        for k, sc in PRESETS.items():
+            if k == req.scenario_id or k.replace('.json', '') == clean_id:
+                scenario = sc
+                break
+    if not scenario:
+        raise HTTPException(status_code=400, detail="Scenario could not be resolved.")
+
+    geometry.validate(scenario)
+    snap0 = geometry.snapshot(scenario, 0.0)
+    sat_design_map = {sat['id']: sat for sat in scenario.get('design', {}).get('satellites', [])}
+    planes_map = {p['id']: p for p in scenario.get('design', {}).get('planes', [])}
+    launch_stage = scenario.get('design', {}).get('launch_stage', 3)
+    num_planes = max(1, len(planes_map))
+
+    sats_list = []
+    for s in snap0.get("satellites", []):
+        sid = s["id"]
+        orig_sat = sat_design_map.get(sid, {})
+        batch = orig_sat.get("launch_batch", 1)
+        if batch > launch_stage:
+            continue
+        x = s.get("x_km", 0.0)
+        y = s.get("y_km", 0.0)
+        z = s.get("z_km", 0.0)
+        r = math.sqrt(x*x + y*y + z*z)
+        
+        if r > 0:
+            sub_lat = math.degrees(math.asin(max(-1.0, min(1.0, z / r))))
+            sub_lon = math.degrees(math.atan2(y, x))
+            alt_km = r - 6371.0
+        else:
+            sub_lat, sub_lon, alt_km = 0.0, 0.0, 600.0
+
+        p_id = str(orig_sat.get("plane_id", "P1"))
+        p_str = p_id.replace("P", "")
+        plane_num = int(p_str) if p_str.isdigit() else 1
+
+        plane_info = planes_map.get(p_id, {})
+        default_raan = (plane_num - 1) * (360.0 / num_planes)
+        default_phase = (plane_num - 1) * 15.0
+        
+        raan = plane_info.get("raan_deg", default_raan)
+        phase = plane_info.get("phase_deg", default_phase)
+        slot_deg = float(orig_sat.get("slot_deg", orig_sat.get("slot", 0)))
+
+        sats_list.append({
+            "id": sid,
+            "plane": plane_num,
+            "idx": int(orig_sat.get("idx", slot_deg)),
+            "altitude": round(alt_km, 2),
+            "inc": scenario.get("environment", {}).get("inclination_deg", 86.4),
+            "raan": round(raan, 2),
+            "phase": round(phase, 2),
+            "arg_per": 0,
+            "true_anomaly": round(slot_deg, 2),
+            "slot_deg": round(slot_deg, 2),
+            "sub_lat": round(sub_lat, 4),
+            "sub_lon": round(sub_lon, 4),
+            "temperature_c": 35.0,
+            "overheated": False,
+            "fuel_kg": 10.0,
+            "fuel_pct": 100.0
+        })
+        
+    gws_list = []
+    for g in scenario.get("ground_sites", []):
+        gws_list.append({
+            "id": g["id"],
+            "name": g.get("name", g["id"]),
+            "lat": g["lat_deg"],
+            "lon": g["lon_deg"],
+            "type": g.get("role", "gateway")
+        })
+
+    title = scenario.get("meta", {}).get("title", "Сценарий")
+    scenario_id = scenario.get("meta", {}).get("id", title.replace(" ", "_").lower())
+
+    return {
+        "scenario_id": scenario_id,
+        "title": title,
+        "description": f"Конфигурация ({len(sats_list)} КА) — расчет ожидает команды пользователя",
+        "timestamp_utc": "2026-09-11T22:40:00Z",
+        "satellites": sats_list,
+        "gateways": gws_list,
+        "routes_sample": [],
+        "raw_scenario": scenario,
+        "simulation_result": None
+    }
+
+@app.get("/api/scenarios/preview")
+def preview_scenario_get(scenario_id: str = "01_full_constellation"):
+    return preview_scenario(ScenarioPreviewRequest(scenario_id=scenario_id))
 
 @app.post("/api/compare")
 def compare_scenarios(req: CompareRequest, db: Session = Depends(get_db)):

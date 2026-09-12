@@ -1,8 +1,9 @@
+from __future__ import annotations
 import random
 import copy
 import math
 import concurrent.futures
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from backend.calc_engine import run_simulation
 
 def generate_monte_carlo_scenarios(base_scenario: Dict[str, Any], settings: Dict[str, Any], num_samples: int = 12) -> List[Dict[str, Any]]:
@@ -20,12 +21,12 @@ def generate_monte_carlo_scenarios(base_scenario: Dict[str, Any], settings: Dict
         
     scenarios = []
     
-    # Variant 0: Optimistic (Baseline, No failures)
     sc0 = copy.deepcopy(base_scenario)
     if "meta" not in sc0: sc0["meta"] = {}
     sc0["meta"]["title"] = "Базовый (Без отказов КА)"
     sc0["meta"]["id"] = "mc_optimistic"
     sc0["failures"] = []
+    sc0.setdefault("gateway_outages", [])
     sc0["_mc_prob"] = max(0.01, (1.0 - p_fail_daily) ** max(1, total_sats))
     sc0["_mc_type"] = "optimistic"
     sc0["_mc_failed_count"] = 0
@@ -38,6 +39,7 @@ def generate_monte_carlo_scenarios(base_scenario: Dict[str, Any], settings: Dict
     for i in range(1, num_samples):
         sc = copy.deepcopy(base_scenario)
         if "meta" not in sc: sc["meta"] = {}
+        sc.setdefault("gateway_outages", [])
         
         # Sample failure counts to represent realistic reliability distribution
         if i == 1:
@@ -101,7 +103,7 @@ def generate_monte_carlo_scenarios(base_scenario: Dict[str, Any], settings: Dict
             
     return scenarios
 
-def analyze_combinations(base_scenario: Dict[str, Any], settings: Dict[str, Any]) -> Dict[str, Any]:
+def analyze_combinations(base_scenario: Dict[str, Any], settings: Dict[str, Any], base_result: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     num_samples = int(settings.get("num_samples", 12) or 12)
     scenarios = generate_monte_carlo_scenarios(base_scenario, settings, num_samples=num_samples)
     
@@ -115,13 +117,15 @@ def analyze_combinations(base_scenario: Dict[str, Any], settings: Dict[str, Any]
     p_fail_daily = float(settings.get("failure_probability", 0.01) or 0.01)
 
     def process_scenario(sc):
-        # Use slightly optimized step_s for Monte Carlo variations to guarantee sub-second response
-        sc_run = copy.deepcopy(sc)
-        if sc_run.get("_mc_type") == "failure":
+        if sc.get("_mc_type") == "optimistic" and base_result is not None:
+            res = copy.deepcopy(base_result)
+        else:
+            sc_run = copy.deepcopy(sc)
+            sc_run.setdefault("gateway_outages", [])
+            sc_run.setdefault("failures", [])
             cur_step = sc_run.get("environment", {}).get("step_s", 120)
-            sc_run["environment"]["step_s"] = max(240, cur_step)
-            
-        res = run_simulation(sc_run, settings)
+            sc_run["environment"]["step_s"] = max(480, cur_step)
+            res = run_simulation(sc_run, settings)
         
         failed_count = sc.get("_mc_failed_count", 0)
         prob = sc.get("_mc_prob", 0.0)

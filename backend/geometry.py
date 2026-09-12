@@ -52,8 +52,13 @@ def validate(s: dict) -> None:
     for g in ground:
         if g['role'] not in ('client', 'gateway') or not finite(g['lat_deg']) or (not finite(g['lon_deg'])) or (not (-90 <= g['lat_deg'] <= 90 and -180 <= g['lon_deg'] <= 180)):
             raise ValueError('Invalid ground site')
+    if 'failures' not in s or s['failures'] is None:
+        s['failures'] = []
+    if 'gateway_outages' not in s or s['gateway_outages'] is None:
+        s['gateway_outages'] = []
+
     for field, key, valid in [('failures', 'satellite_id', set(ids)), ('gateway_outages', 'gateway_id', {g['id'] for g in ground if g['role'] == 'gateway'})]:
-        for f in s[field]:
+        for f in s.get(field, []):
             if f[key] not in valid or not all((finite(f[k]) for k in ('start_s', 'end_s'))) or (not 0 <= f['start_s'] < f['end_s'] <= e['horizon_s']):
                 raise ValueError('Invalid outage')
 
@@ -81,7 +86,7 @@ def snapshot(s: dict, t_s: float) -> dict:
     """Edges are potential bidirectional contacts; ground nodes cannot relay traffic."""
     e, d = (s['environment'], s['design'])
     ids, inertial, xyz = positions(s, t_s)
-    failed = {f['satellite_id'] for f in s['failures'] if f['start_s'] <= t_s < f['end_s']}
+    failed = {f['satellite_id'] for f in s.get('failures', []) if f['start_s'] <= t_s < f['end_s']}
     active = np.array([sat['launch_batch'] <= d['launch_stage'] and sat['id'] not in failed for sat in d['satellites']])
     i, j = np.triu_indices(len(ids), 1)
     delta = xyz[j] - xyz[i]
