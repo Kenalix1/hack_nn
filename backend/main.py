@@ -193,8 +193,11 @@ def simulate(req: SimulateRequest, db: Session = Depends(get_db)):
         # Rest of response formatting
         snap0 = result["snapshots"][0] if result.get("snapshots") else {}
         sat_design_map = {sat['id']: sat for sat in scenario.get('design', {}).get('satellites', [])}
+        planes_map = {p['id']: p for p in scenario.get('design', {}).get('planes', [])}
         launch_stage = scenario.get('design', {}).get('launch_stage', 3)
         
+        num_planes = max(1, len(planes_map))
+
         sats_list = []
         for s in snap0.get("satellites", []):
             sid = s["id"]
@@ -214,20 +217,30 @@ def simulate(req: SimulateRequest, db: Session = Depends(get_db)):
             else:
                 sub_lat, sub_lon, alt_km = 0.0, 0.0, 600.0
 
-            orig_sat = sat_design_map.get(sid, {})
-            p_str = str(orig_sat.get("plane_id", "P1")).replace("P", "")
+            p_id = str(orig_sat.get("plane_id", "P1"))
+            p_str = p_id.replace("P", "")
             plane_num = int(p_str) if p_str.isdigit() else 1
+
+            plane_info = planes_map.get(p_id, {})
+            default_raan = (plane_num - 1) * (360.0 / num_planes)
+            default_phase = (plane_num - 1) * 15.0
+            
+            raan = plane_info.get("raan_deg", default_raan)
+            phase = plane_info.get("phase_deg", default_phase)
+            slot_deg = float(orig_sat.get("slot_deg", orig_sat.get("slot", 0)))
 
             sat_status = result.get('satellites_status', {}).get(sid, {})
             sats_list.append({
                 "id": sid,
                 "plane": plane_num,
-                "idx": int(orig_sat.get("slot_deg", 0)),
+                "idx": int(orig_sat.get("idx", slot_deg)),
                 "altitude": round(alt_km, 2),
                 "inc": scenario.get("environment", {}).get("inclination_deg", 86.4),
-                "raan": 0,
+                "raan": round(raan, 2),
+                "phase": round(phase, 2),
                 "arg_per": 0,
-                "true_anomaly": 0,
+                "true_anomaly": round(slot_deg, 2),
+                "slot_deg": round(slot_deg, 2),
                 "sub_lat": round(sub_lat, 4),
                 "sub_lon": round(sub_lon, 4),
                 "temperature_c": sat_status.get("temperature_c", 35.0),

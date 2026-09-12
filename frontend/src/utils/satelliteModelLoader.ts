@@ -90,7 +90,7 @@ export function createSatelliteMaterials(
       ? colors.offlineSatColor || '#ff3b30'
       : status === 'highLatency'
       ? colors.highLatencySatColor || '#ff9900'
-      : colors.satColor || '#00f0ff';
+      : colors.satColor || '#ffffff';
 
   const baseColor = new THREE.Color(baseHex);
   // Enhance body brightness and saturation so it clearly pops out in space

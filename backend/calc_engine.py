@@ -43,19 +43,18 @@ def compute_step(scenario: dict, t_s: int, min_elev: float, clients: list, gatew
         best_path = None
         best_length = float('inf')
         
-        if has_visibility and active_gateways:
-            for gw in active_gateways:
-                if G.has_node(cid) and G.has_node(gw) and nx.has_path(G, cid, gw):
-                    try:
-                        p = nx.shortest_path(G, source=cid, target=gw, weight='weight')
+        if has_visibility and active_gateways and G.has_node(cid):
+            try:
+                lengths, paths = nx.single_source_dijkstra(G, source=cid, weight='weight')
+                for gw in active_gateways:
+                    if gw in paths and lengths[gw] < best_length:
+                        p = paths[gw]
                         intermediate = p[1:-1]
                         if all(G.nodes[node]['type'] == 'sat' for node in intermediate):
-                            length = nx.path_weight(G, p, weight='weight')
-                            if length < best_length:
-                                best_length = length
-                                best_path = p
-                    except (nx.NetworkXNoPath, nx.NodeNotFound):
-                        pass
+                            best_length = lengths[gw]
+                            best_path = p
+            except (nx.NetworkXNoPath, nx.NodeNotFound):
+                pass
                         
         if best_path:
             step_routes[cid] = best_path
