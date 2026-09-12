@@ -399,13 +399,21 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Right Actions & Outliner Toggle */}
-      <div className="hdr-section">
+      <div className="hdr-section" style={{ marginLeft: 'auto' }}>
         <button
           onClick={onToggleSidebar}
           title="Панель элементов (Аутлайнер)"
-          className={`hdr-toggle-btn ${isSidebarOpen ? 'active' : 'inactive'}`}
+          className={`hdr-btn ${isSidebarOpen ? 'hdr-btn-primary' : 'hdr-btn-secondary'}`}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontWeight: 600,
+            padding: '6px 12px'
+          }}
         >
-          <PanelRight size={16} />
+          <PanelRight size={15} />
+          <span>Аутлайнер</span>
         </button>
       </div>
     </header>

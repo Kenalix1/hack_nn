@@ -51,7 +51,7 @@ const defaultOutlinerSettings: OutlinerSettings = {
   satGlow: true,
   satSize: 1.0,
   orbitOpacity: 0.5,
-  stepSeconds: 10,
+  stepSeconds: 1,
   satColor: '#ffffff',
   offlineSatColor: '#ef4444',
   highLatencySatColor: '#f59e0b',

@@ -123,7 +123,7 @@ export const TimelineBar: React.FC<TimelineBarProps> = ({
       {/* Step dt Selector Buttons */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
         <span style={{ fontSize: '11px', color: '#aaa', fontWeight: 600, textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}>dt:</span>
-        {[1, 10, 60, 300].map(s => (
+        {[1, 5, 10, 60, 300].map(s => (
           <button
             key={s}
             onClick={() => onChangeStep(s)}
