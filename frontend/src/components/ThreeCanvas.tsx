@@ -584,11 +584,11 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
 
       // Pure ECI 3D Cartesian coordinates (Three.js frame: Y is North Pole, X-Z is Equatorial Plane)
       const xEci = rThree * (Math.cos(totalRaanRad) * Math.cos(u) - Math.sin(totalRaanRad) * Math.sin(u) * Math.cos(inc));
-      const zEci = rThree * (Math.sin(totalRaanRad) * Math.cos(u) + Math.cos(totalRaanRad) * Math.sin(u) * Math.cos(inc));
+      const zEci = - rThree * (Math.sin(totalRaanRad) * Math.cos(u) + Math.cos(totalRaanRad) * Math.sin(u) * Math.cos(inc));
       const yEci = rThree * (Math.sin(u) * Math.sin(inc));
 
       const xKm = orbRadiusKm * (Math.cos(totalRaanRad) * Math.cos(u) - Math.sin(totalRaanRad) * Math.sin(u) * Math.cos(inc));
-      const zKm = orbRadiusKm * (Math.sin(totalRaanRad) * Math.cos(u) + Math.cos(totalRaanRad) * Math.sin(u) * Math.cos(inc));
+      const zKm = - orbRadiusKm * (Math.sin(totalRaanRad) * Math.cos(u) + Math.cos(totalRaanRad) * Math.sin(u) * Math.cos(inc));
       const yKm = orbRadiusKm * (Math.sin(u) * Math.sin(inc));
 
       const pos = new THREE.Vector3(xEci, yEci, zEci);
@@ -786,7 +786,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
         for (let i = 0; i <= STEPS; i++) {
           const u = (i / STEPS) * Math.PI * 2;
           const xEci = rThree * (Math.cos(totalRaanRad) * Math.cos(u) - Math.sin(totalRaanRad) * Math.sin(u) * Math.cos(inc));
-          const zEci = rThree * (Math.sin(totalRaanRad) * Math.cos(u) + Math.cos(totalRaanRad) * Math.sin(u) * Math.cos(inc));
+          const zEci = - rThree * (Math.sin(totalRaanRad) * Math.cos(u) + Math.cos(totalRaanRad) * Math.sin(u) * Math.cos(inc));
           const yEci = rThree * (Math.sin(u) * Math.sin(inc));
 
           ringPoints.push(new THREE.Vector3(xEci, yEci, zEci));
@@ -823,7 +823,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
       const N = aWgs / Math.sqrt(1.0 - e2Wgs * Math.sin(latRad) * Math.sin(latRad));
 
       const xG = N * Math.cos(latRad) * Math.cos(lonRad);
-      const zG = N * Math.cos(latRad) * Math.sin(lonRad);
+      const zG = - N * Math.cos(latRad) * Math.sin(lonRad);
       const yG = N * (1.0 - e2Wgs) * Math.sin(latRad);
 
       const pos = new THREE.Vector3(xG, yG, zG);

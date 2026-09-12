@@ -7,24 +7,40 @@ interface EventLogPanelProps {
 }
 
 export const EventLogPanel: React.FC<EventLogPanelProps> = ({ logs }) => {
-  const [isExpanded, setIsExpanded] = useState<boolean>(true);
+  const [isExpanded, setIsExpanded] = useState<boolean>(() => {
+    if (typeof window !== 'undefined' && window.innerWidth <= 768) return false;
+    return true;
+  });
 
   return (
-    <div style={{
-      position: 'fixed',
-      bottom: '12px',
-      left: '16px',
-      width: '420px',
-      maxWidth: 'calc(100vw - 32px)',
-      zIndex: 80,
-      backgroundColor: '#1a1a1a',
-      border: '1px solid #383838',
-      borderRadius: '6px',
-      boxShadow: '0 6px 20px rgba(0,0,0,0.5)',
-      overflow: 'hidden',
-      fontFamily: 'monospace',
-      fontSize: '11px'
-    }}>
+    <>
+      <style>{`
+        .event-log-panel-root {
+          position: fixed;
+          bottom: 12px;
+          left: 16px;
+          width: 420px;
+          max-width: calc(100vw - 32px);
+          z-index: 80;
+          background-color: #1a1a1a;
+          border: 1px solid #383838;
+          border-radius: 6px;
+          box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+          overflow: hidden;
+          font-family: monospace;
+          font-size: 11px;
+          transition: bottom 0.2s ease;
+        }
+        @media (max-width: 768px) {
+          .event-log-panel-root {
+            bottom: 122px;
+            left: 10px;
+            width: auto;
+            max-width: calc(100vw - 20px);
+          }
+        }
+      `}</style>
+      <div className="event-log-panel-root">
       {/* Bar Header */}
       <div
         onClick={() => setIsExpanded(!isExpanded)}
@@ -73,5 +89,6 @@ export const EventLogPanel: React.FC<EventLogPanelProps> = ({ logs }) => {
         </div>
       )}
     </div>
+    </>
   );
 };

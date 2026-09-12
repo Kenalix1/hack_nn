@@ -52,152 +52,298 @@ export const TimelineBar: React.FC<TimelineBarProps> = ({
     }
   };
 
+  const currentPercent = Math.min(100, Math.round((currentTime / maxTime) * 100));
+
   return (
-    <div style={{
-      position: 'absolute',
-      bottom: '24px',
-      right: '24px',
-      width: '840px',
-      maxWidth: 'calc(100% - 48px)',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '14px',
-      zIndex: 85,
-      backgroundColor: 'rgba(15, 23, 42, 0.92)',
-      border: '1px solid rgba(255, 255, 255, 0.15)',
-      borderRadius: '12px',
-      padding: '12px 20px',
-      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.6)',
-      backdropFilter: 'blur(12px)',
-      color: '#e0e0e0',
-      fontSize: '13px'
-    }}>
-      {/* Playback Controls */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <button
-          onClick={() => onChangeTime(prev => Math.max(0, prev - stepSeconds))}
-          style={btnStyle}
-          title="Шаг назад"
-        >
-          <SkipBack size={18} />
-        </button>
+    <>
+      <style>{`
+        .timeline-bar-root {
+          position: absolute;
+          bottom: 24px;
+          right: 24px;
+          width: 860px;
+          max-width: calc(100% - 48px);
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          z-index: 85;
+          background-color: rgba(10, 15, 26, 0.94);
+          border: 1px solid rgba(56, 189, 248, 0.3);
+          border-radius: 12px;
+          padding: 10px 18px;
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7), 0 0 15px rgba(2, 132, 199, 0.15);
+          backdrop-filter: blur(14px);
+          color: #e2e8f0;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+          font-size: 13px;
+          box-sizing: border-box;
+          transition: all 0.2s ease;
+        }
 
-        <button
-          onClick={() => setIsPlaying(!isPlaying)}
-          style={{
-            ...btnStyle,
-            backgroundColor: isPlaying ? '#ff3b30' : '#1473e6',
-            color: '#fff',
-            border: 'none',
-            boxShadow: isPlaying ? '0 2px 10px rgba(255, 59, 48, 0.5)' : '0 2px 10px rgba(20, 115, 230, 0.5)'
-          }}
-          title={isPlaying ? 'Пауза' : 'Воспроизведение'}
-        >
-          {isPlaying ? <Pause size={18} /> : <Play size={18} />}
-        </button>
+        .timeline-controls-cluster {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
 
-        <button
-          onClick={() => onChangeTime(prev => Math.min(maxTime, prev + stepSeconds))}
-          style={btnStyle}
-          title="Шаг вперед"
-        >
-          <SkipForward size={18} />
-        </button>
-      </div>
+        .timeline-slider-cluster {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          min-width: 160px;
+        }
 
-      {/* Interactive Time Slider */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '180px' }}>
-        <input
-          type="range"
-          min="0"
-          max={maxTime}
-          step={stepSeconds}
-          value={currentTime}
-          onChange={(e) => {
-            const val = parseInt(e.target.value, 10);
-            onChangeTime(() => val);
-          }}
-          style={{
-            width: '100%',
-            accentColor: '#1473e6',
-            cursor: 'pointer',
-            height: '8px',
-            filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.8))'
-          }}
-        />
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          fontSize: '11px',
-          color: '#aaa',
-          fontWeight: 600
-        }}>
-          <span>T=0с</span>
-          <span>{Math.round((currentTime / maxTime) * 100)}%</span>
-          <span>T=24ч</span>
+        .timeline-range-input {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 100%;
+          height: 8px;
+          border-radius: 4px;
+          background: #1e293b;
+          outline: none;
+          cursor: pointer;
+          margin: 4px 0;
+        }
+
+        .timeline-range-input::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background: #38bdf8;
+          border: 2px solid #ffffff;
+          box-shadow: 0 0 10px rgba(56, 189, 248, 0.9);
+          cursor: pointer;
+          transition: transform 0.1s ease;
+        }
+
+        .timeline-range-input::-webkit-slider-thumb:hover {
+          transform: scale(1.15);
+        }
+
+        .timeline-range-input::-moz-range-thumb {
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background: #38bdf8;
+          border: 2px solid #ffffff;
+          box-shadow: 0 0 10px rgba(56, 189, 248, 0.9);
+          cursor: pointer;
+        }
+
+        .timeline-step-cluster {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .timeline-clock-badge {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-family: "SF Mono", Consolas, Menlo, monospace;
+          background-color: rgba(6, 18, 36, 0.95);
+          border: 1px solid rgba(56, 189, 248, 0.35);
+          padding: 6px 12px;
+          border-radius: 8px;
+          color: #38bdf8;
+          font-size: 13px;
+          font-weight: 800;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+          white-space: nowrap;
+        }
+
+        /* Mobile & Tablet Responsive Layout */
+        @media (max-width: 768px) {
+          .timeline-bar-root {
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            width: auto;
+            max-width: none;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            background-color: rgba(7, 12, 22, 0.97);
+            border: 1.5px solid rgba(56, 189, 248, 0.4);
+            box-shadow: 0 -4px 30px rgba(0, 0, 0, 0.85);
+          }
+
+          .timeline-mobile-top-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            gap: 8px;
+          }
+
+          .timeline-controls-cluster {
+            gap: 6px;
+          }
+
+          .timeline-controls-cluster button {
+            width: 38px !important;
+            height: 38px !important;
+          }
+
+          .timeline-step-cluster span {
+            display: none;
+          }
+
+          .timeline-step-input {
+            width: 54px !important;
+            font-size: 12px !important;
+            padding: 4px 6px !important;
+          }
+
+          .timeline-clock-badge {
+            font-size: 12px;
+            padding: 5px 8px;
+          }
+
+          .timeline-slider-cluster {
+            width: 100%;
+          }
+
+          .timeline-range-input {
+            height: 10px;
+          }
+
+          .timeline-range-input::-webkit-slider-thumb {
+            width: 24px;
+            height: 24px;
+          }
+
+          .timeline-range-input::-moz-range-thumb {
+            width: 24px;
+            height: 24px;
+          }
+        }
+      `}</style>
+
+      <div className="timeline-bar-root">
+        {/* Top / Main Controls Area */}
+        <div className="timeline-mobile-top-row" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {/* Playback Buttons */}
+          <div className="timeline-controls-cluster">
+            <button
+              onClick={() => onChangeTime(prev => Math.max(0, prev - stepSeconds))}
+              style={btnStyle}
+              title="Шаг назад"
+            >
+              <SkipBack size={18} />
+            </button>
+
+            <button
+              onClick={() => setIsPlaying(!isPlaying)}
+              style={{
+                ...btnStyle,
+                backgroundColor: isPlaying ? '#ef4444' : '#0284c7',
+                color: '#fff',
+                border: 'none',
+                boxShadow: isPlaying ? '0 0 14px rgba(239, 68, 68, 0.6)' : '0 0 14px rgba(2, 132, 199, 0.6)'
+              }}
+              title={isPlaying ? 'Пауза' : 'Воспроизведение'}
+            >
+              {isPlaying ? <Pause size={18} /> : <Play size={18} style={{ marginLeft: '2px' }} />}
+            </button>
+
+            <button
+              onClick={() => onChangeTime(prev => Math.min(maxTime, prev + stepSeconds))}
+              style={btnStyle}
+              title="Шаг вперед"
+            >
+              <SkipForward size={18} />
+            </button>
+          </div>
+
+          {/* Manual Step Seconds Input */}
+          <div className="timeline-step-cluster">
+            <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, whiteSpace: 'nowrap' }}>
+              Шаг:
+            </span>
+            <input
+              type="number"
+              min="1"
+              max="86400"
+              value={inputValue}
+              onChange={handleStepInputChange}
+              className="timeline-step-input"
+              style={{
+                width: '64px',
+                backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                color: '#34d399',
+                border: '1px solid #334155',
+                borderRadius: '6px',
+                padding: '6px 8px',
+                fontSize: '12px',
+                fontWeight: 700,
+                outline: 'none',
+                textAlign: 'center',
+                boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.5)'
+              }}
+              title="Шаг моделирования (секунды)"
+            />
+            <span style={{ fontSize: '11px', color: '#64748b' }}>с</span>
+          </div>
+
+          {/* Time Offset Counter */}
+          <div className="timeline-clock-badge">
+            <Clock size={15} style={{ color: '#38bdf8' }} />
+            <span>{formatHours(currentTime)}</span>
+          </div>
+        </div>
+
+        {/* Interactive Time Slider */}
+        <div className="timeline-slider-cluster">
+          <input
+            type="range"
+            min="0"
+            max={maxTime}
+            step={stepSeconds}
+            value={currentTime}
+            onChange={(e) => {
+              const val = parseInt(e.target.value, 10);
+              onChangeTime(() => val);
+            }}
+            className="timeline-range-input"
+          />
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            fontSize: '11px',
+            color: '#94a3b8',
+            fontFamily: 'monospace',
+            fontWeight: 600,
+            padding: '0 2px'
+          }}>
+            <span style={{ color: '#64748b' }}>T=0с</span>
+            <span style={{ color: '#38bdf8', fontWeight: 800 }}>{currentPercent}% орбиты</span>
+            <span style={{ color: '#64748b' }}>T=24ч</span>
+          </div>
         </div>
       </div>
-
-      {/* Manual Step Seconds Input */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-        <span style={{ fontSize: '12px', color: '#ccc', fontWeight: 600, whiteSpace: 'nowrap' }}>Шаг (сек):</span>
-        <input
-          type="number"
-          min="1"
-          max="86400"
-          value={inputValue}
-          onChange={handleStepInputChange}
-          style={{
-            width: '64px',
-            backgroundColor: 'rgba(25, 30, 45, 0.9)',
-            color: '#00ff88',
-            border: '1px solid #444',
-            borderRadius: '6px',
-            padding: '5px 8px',
-            fontSize: '13px',
-            fontWeight: 'bold',
-            outline: 'none',
-            textAlign: 'center',
-            boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.5)'
-          }}
-        />
-      </div>
-
-      {/* Time Offset Counter */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '6px',
-        fontFamily: 'monospace',
-        backgroundColor: 'rgba(10, 15, 25, 0.9)',
-        border: '1px solid #334',
-        padding: '5px 10px',
-        borderRadius: '6px',
-        color: '#00ff88',
-        fontSize: '13px',
-        fontWeight: 'bold',
-        boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
-        backdropFilter: 'blur(4px)'
-      }}>
-        <Clock size={14} />
-        <span>{formatHours(currentTime)}</span>
-      </div>
-    </div>
+    </>
   );
 };
 
 const btnStyle: React.CSSProperties = {
-  backgroundColor: 'rgba(30, 40, 55, 0.85)',
-  color: '#e0e0e0',
-  border: '1px solid #445',
-  borderRadius: '6px',
+  backgroundColor: 'rgba(30, 41, 59, 0.9)',
+  color: '#ffffff',
+  border: '1px solid rgba(71, 85, 105, 0.7)',
+  borderRadius: '8px',
   width: '36px',
   height: '36px',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
   cursor: 'pointer',
-  boxShadow: '0 2px 6px rgba(0, 0, 0, 0.4)',
+  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.4)',
   backdropFilter: 'blur(4px)',
   transition: 'all 0.15s ease'
 };
