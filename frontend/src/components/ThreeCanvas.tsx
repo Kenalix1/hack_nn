@@ -390,10 +390,24 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
       });
     }
 
+    const satByIdMap = new Map<string, Satellite>();
+    (scenario.satellites || []).forEach(s => satByIdMap.set(s.id, s));
+
+    const isSatHidden = (satId: string) => {
+      const sat = satByIdMap.get(satId);
+      if (!sat) return false;
+      return !!(settings.hiddenPlanes?.[sat.plane] || settings.hiddenSatellites?.[satId]);
+    };
+
+    const isGwHidden = (gwId: string) => {
+      return settings.showGateways === false || !!settings.hiddenGateways?.[gwId];
+    };
+
     const onlineSatPosList: THREE.Vector3[] = [];
 
     scenario.satellites.forEach(sat => {
       const planeNum = sat.plane;
+      const isVisible = !isSatHidden(sat.id);
       const isOffline = offlineSet.has(sat.id);
       const isHighLatency = !isOffline && (highLatencySatSet.has(sat.id) || Math.sin((currentTime * 0.002) + sat.plane) > 0.6);
 
@@ -429,7 +443,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
       satPosMap[sat.id] = pos;
       satPosMapRef.current[sat.id] = pos;
 
-      if (!isOffline) {
+      if (!isOffline && isVisible) {
         onlineSatPosList.push(pos);
       }
 
@@ -438,7 +452,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
       if (!planeMap[planeNum]) planeMap[planeNum] = [];
       planeMap[planeNum].push({ sat, pos, posKm, isOffline, isHighLatency, uAngle: u });
 
-      if (settings.showSatellites) {
+      if (settings.showSatellites && isVisible) {
         const modelsTemplate = getCachedSatelliteModels();
         const status: SatelliteStatus = isOffline ? 'offline' : isHighLatency ? 'highLatency' : 'active';
         const isFocused = sat.id === focusedSatelliteId;
@@ -491,7 +505,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
         }
       }
 
-      if (settings.showLabels) {
+      if (settings.showLabels && isVisible) {
         const isFocused = sat.id === focusedSatelliteId;
         const labelText = isFocused ? `${sat.id} [Фокус]` : isOffline ? `${sat.id} [ОТКАЗ]` : isHighLatency ? `${sat.id} [! Задержка]` : sat.id;
         const labelColor = isOffline ? settings.offlineSatColor : isFocused ? '#00f0ff' : isHighLatency ? settings.highLatencySatColor : settings.satColor;
@@ -501,7 +515,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
       }
 
       // Render 3D Translucent Field of View Cone when satellite is focused/selected
-      if (focusedSatelliteId === sat.id) {
+      if (focusedSatelliteId === sat.id && isVisible) {
         const coneHeight = rThree - earthRadius;
         const coneRadius = coneHeight * Math.tan((35 * Math.PI) / 180); // 10 deg min elevation FOV beam
 
@@ -546,7 +560,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
       }
 
       // Render 3D Surface Coverage Zones when showCoverageHeatmap is toggled ON
-      if (settings.showCoverageHeatmap) {
+      if (settings.showCoverageHeatmap && isVisible) {
         const coneHeight = rThree - earthRadius;
         const coneRadius = coneHeight * Math.tan((35 * Math.PI) / 180);
         
@@ -584,6 +598,8 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
     if (settings.showOrbits) {
       Object.keys(planeMap).forEach(pStr => {
         const pNum = parseInt(pStr);
+        if (settings.hiddenPlanes?.[pNum]) return; // Skip hidden orbital plane
+
         const sampleSat = planeMap[pNum][0]?.sat;
         if (!sampleSat) return;
 
@@ -642,7 +658,9 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
       const pos = new THREE.Vector3(xG, yG, zG);
       gwPosMap[gw.id] = pos;
 
-      if (settings.showGateways) {
+      const isGwVisible = !isGwHidden(gw.id);
+
+      if (settings.showGateways && isGwVisible) {
         const dishTemplate = getCachedDishModel();
         const dishObj = buildDish3DObject(dishTemplate, settings.gatewayColor || '#00d084', settings.satSize);
         dishObj.position.copy(pos);
@@ -652,7 +670,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
         gateways.add(dishObj);
       }
 
-      if (settings.showLabels) {
+      if (settings.showLabels && settings.showGateways && isGwVisible) {
         const labelSprite = createTextLabelSprite(gw.id, '#ffffff', settings.gatewayColor || '#00d084');
         labelSprite.position.set(pos.x * 1.05, pos.y * 1.05 + 0.25, pos.z * 1.05);
         labels.add(labelSprite);
@@ -665,10 +683,17 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
       
       // 1. Intra-plane ISLs (Along orbital ring)
       planeKeys.forEach(p => {
+        if (settings.hiddenPlanes?.[p]) return; // Skip hidden plane
+
         const items = planeMap[p];
         for (let i = 0; i < items.length; i++) {
           const itemA = items[i];
           const itemB = items[(i + 1) % items.length];
+
+          if (isSatHidden(itemA.sat.id) || isSatHidden(itemB.sat.id)) {
+            continue; // Skip ISL connection to/from hidden satellites
+          }
+
           const isBroken = itemA.isOffline || itemB.isOffline;
           const isHighLatencyHop = itemA.isHighLatency || itemB.isHighLatency;
 
@@ -703,10 +728,16 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
         const pCurrent = planeKeys[i];
         const pNext = planeKeys[(i + 1) % planeKeys.length];
 
+        if (settings.hiddenPlanes?.[pCurrent] || settings.hiddenPlanes?.[pNext]) {
+          continue; // Skip inter-plane links if either plane is hidden
+        }
+
         const currentItems = planeMap[pCurrent];
         const nextItems = planeMap[pNext];
 
         currentItems.forEach(itemA => {
+          if (isSatHidden(itemA.sat.id)) return;
+
           let closestDist = Infinity;
           let closestPos: THREE.Vector3 | null = null;
           let closestPosKm: THREE.Vector3 | null = null;
@@ -714,6 +745,8 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
           let targetHighLatency = false;
 
           nextItems.forEach(itemB => {
+            if (isSatHidden(itemB.sat.id)) return;
+
             const dist = itemA.pos.distanceTo(itemB.pos);
             if (dist < closestDist) {
               closestDist = dist;
@@ -769,6 +802,12 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
           for (let i = 0; i < path.length - 1; i++) {
             const nodeA = path[i];
             const nodeB = path[i + 1];
+
+            // If either endpoint is hidden, skip drawing this link hop
+            if (isGwHidden(nodeA) || isGwHidden(nodeB) || isSatHidden(nodeA) || isSatHidden(nodeB)) {
+              continue;
+            }
+
             const hopKey = [nodeA, nodeB].sort().join('--');
             drawnHops.add(hopKey);
 
@@ -803,9 +842,13 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
 
       // 2. Default straight ray beam connections from ground sites to overhead satellites
       Object.keys(gwPosMap).forEach(gwId => {
+        if (isGwHidden(gwId)) return;
         const gwPos = gwPosMap[gwId];
-        const sortedSats = Object.values(satPosMap)
-          .map(sPos => ({ pos: sPos, dist: gwPos.distanceTo(sPos) }))
+
+        const visibleSats = (scenario.satellites || []).filter(s => !isSatHidden(s.id));
+        const sortedSats = visibleSats
+          .map(s => ({ pos: satPosMap[s.id], dist: satPosMap[s.id] ? gwPos.distanceTo(satPosMap[s.id]) : Infinity }))
+          .filter(item => item.pos && item.dist < Infinity)
           .sort((a, b) => a.dist - b.dist);
 
         sortedSats.slice(0, 2).forEach(item => {

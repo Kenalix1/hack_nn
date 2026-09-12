@@ -59,7 +59,10 @@ const defaultOutlinerSettings: OutlinerSettings = {
   atmosphereColor: '#1e3a8a',
   fovConeColor: '#00f0ff',
   planeRaanMap: {},
-  planePhaseMap: {}
+  planePhaseMap: {},
+  hiddenPlanes: {},
+  hiddenSatellites: {},
+  hiddenGateways: {}
 };
 
 const defaultWindows = {
@@ -103,6 +106,9 @@ export const App: React.FC = () => {
       ...saved,
       planeRaanMap: saved.planeRaanMap || {},
       planePhaseMap: saved.planePhaseMap || {},
+      hiddenPlanes: saved.hiddenPlanes || {},
+      hiddenSatellites: saved.hiddenSatellites || {},
+      hiddenGateways: saved.hiddenGateways || {},
       satColor: saved.satColor || '#00f0ff',
       offlineSatColor: saved.offlineSatColor || '#ff3b30',
       highLatencySatColor: saved.highLatencySatColor || '#ff9900',
