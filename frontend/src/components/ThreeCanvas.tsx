@@ -749,18 +749,16 @@ function createTextLabelSprite(text: string, textColor: string, bgColor: string)
   const ctx = canvas.getContext('2d')!;
 
   ctx.fillStyle = bgColor;
-  ctx.beginPath();
-  ctx.roundRect(8, 8, 144, 32, 6);
-  ctx.fill();
-
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-
-  ctx.fillStyle = textColor;
-  ctx.font = 'bold 15px sans-serif';
+  ctx.font = 'bold 16px sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+  
+  // Add a slight text shadow for better readability against the space background
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+  ctx.shadowBlur = 4;
+  ctx.shadowOffsetX = 1;
+  ctx.shadowOffsetY = 1;
+
   ctx.fillText(text, 80, 24);
 
   const texture = new THREE.CanvasTexture(canvas);
