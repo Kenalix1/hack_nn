@@ -532,8 +532,10 @@ def filter_results_endpoint(task_id: str, filters: FilterRequest):
     raw = task["raw_results"]
     filtered = []
     
-    thresh_avail = filters.thresholds.get("availability", 0.0)
-    thresh_cost = filters.thresholds.get("cost", float('inf'))
+    thresh_avail = filters.thresholds.get("availability") or 0.0
+    thresh_cost = filters.thresholds.get("cost")
+    if thresh_cost is None:
+        thresh_cost = float('inf')
     
     w_avail = filters.weights.get("availability", 0.5)
     w_cost = filters.weights.get("cost", 0.3)

@@ -83,7 +83,7 @@ export const MassSimulationModal: React.FC<MassSimulationModalProps> = ({ scenar
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         weights: { availability: wAvail, cost: wCost, outage: wOutage },
-        thresholds: { availability: 0.0, cost: Infinity }
+        thresholds: { availability: 0.0, cost: 1e12 }
       })
     });
     const data = await res.json();
