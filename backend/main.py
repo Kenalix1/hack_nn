@@ -432,6 +432,8 @@ def mass_simulate(
     req: SimulateRequest,
     time_budget_minutes: int = Query(default=5, ge=2, le=30),
     include_raan_opt: bool = Query(default=False),
+    failure_probability: float = Query(default=None),
+    emergency_launch_cost_usd: float = Query(default=None),
     db: Session = Depends(get_db)
 ):
     task_id = str(uuid.uuid4())
@@ -443,8 +445,8 @@ def mass_simulate(
         'annual_opex_per_sat_usd': settings_db.annual_opex_per_sat_usd,
         'sla_penalty_per_client_usd': settings_db.sla_penalty_per_client_usd,
         'processing_delay_ms': settings_db.processing_delay_ms,
-        'failure_probability': settings_db.failure_probability or 0.01,
-        'emergency_launch_cost_usd': settings_db.emergency_launch_cost_usd or 15000000.0,
+        'failure_probability': failure_probability if failure_probability is not None else (settings_db.failure_probability or 0.01),
+        'emergency_launch_cost_usd': emergency_launch_cost_usd if emergency_launch_cost_usd is not None else (settings_db.emergency_launch_cost_usd or 15000000.0),
     }
     
     mass_sim_tasks[task_id] = {

@@ -6,9 +6,11 @@ interface MassSimulationModalProps {
   onClose: () => void;
   onDrillDown: (failures: any[]) => void;
   onSetCriticalSatellites?: (sats: string[]) => void;
+  failureProb?: number;
+  launchCost?: number;
 }
 
-export const MassSimulationModal: React.FC<MassSimulationModalProps> = ({ scenario, onClose, onDrillDown, onSetCriticalSatellites }) => {
+export const MassSimulationModal: React.FC<MassSimulationModalProps> = ({ scenario, onClose, onDrillDown, onSetCriticalSatellites, failureProb, launchCost }) => {
   const [timeBudget, setTimeBudget] = useState<number>(5);
   const [includeRaanOpt, setIncludeRaanOpt] = useState<boolean>(false);
   const [taskId, setTaskId] = useState<string | null>(null);
@@ -25,7 +27,11 @@ export const MassSimulationModal: React.FC<MassSimulationModalProps> = ({ scenar
   const startSimulation = async () => {
     try {
       setStatus('running');
-      const res = await fetch(`/api/mass_simulate?time_budget_minutes=${timeBudget}&include_raan_opt=${includeRaanOpt}`, {
+      let url = `/api/mass_simulate?time_budget_minutes=${timeBudget}&include_raan_opt=${includeRaanOpt}`;
+      if (failureProb !== undefined) url += `&failure_probability=${failureProb}`;
+      if (launchCost !== undefined) url += `&emergency_launch_cost_usd=${launchCost}`;
+      
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ scenario })

@@ -75,7 +75,14 @@ export const CompareModal: React.FC<CompareModalProps> = ({ onOpenConfigurator, 
           <button onClick={() => setActiveTab('mass_sim')} style={{ background: 'transparent', color: '#00ff88', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Monte Carlo Анализ</button>
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
-            <MassSimulationModal scenario={baseScenario} onClose={onClose || (() => {})} onDrillDown={handleDrillDown} onSetCriticalSatellites={onSetCriticalSatellites} />
+            <MassSimulationModal 
+                scenario={baseScenario} 
+                onClose={onClose || (() => {})} 
+                onDrillDown={handleDrillDown} 
+                onSetCriticalSatellites={onSetCriticalSatellites} 
+                failureProb={failureProb}
+                launchCost={launchCost}
+            />
         </div>
       </div>
     );
