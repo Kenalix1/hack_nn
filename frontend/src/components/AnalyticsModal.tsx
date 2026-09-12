@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { BarChart2, Activity, ShieldCheck, Zap, Server, AlertTriangle, CheckCircle2, XCircle, DollarSign, Flame, Fuel, ArrowRight, Clock, Globe, Layers, Download, FileText } from 'lucide-react';
 import { ScenarioData, SatelliteOutage } from '../types';
 import { getDynamicSatelliteTelemetry } from '../utils/telemetry';
-import { EmergencyRecommendationsModal } from './EmergencyRecommendationsModal';
 
 interface AnalyticsModalProps {
   scenario: ScenarioData | null;
@@ -52,10 +51,12 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
 
   // SLA & latency from simulation result
   const simResult = scenario.simulation_result;
-  const overallAvailVal = simResult ? simResult.overall_availability * 100 : 99.98;
+  const rawOverall = simResult?.overall_availability ?? 0.9998;
+  const overallAvailVal = rawOverall > 1 ? rawOverall : rawOverall * 100;
   const overallAvailStr = overallAvailVal.toFixed(2);
   const realTimeLatencyMs = (38.4 + offlineCount * 4.2).toFixed(1);
-  const isSlaBreached = (simResult?.overall_availability ?? 1.0) < 0.90 || simResult?.all_targets_met === false;
+  const availFraction = rawOverall > 1 ? rawOverall / 100 : rawOverall;
+  const isSlaBreached = availFraction < 0.90 || simResult?.all_targets_met === false;
 
   const clientSummaries = simResult?.client_summaries || [];
   const topSats = simResult?.vulnerability?.top_used_satellites || [];
@@ -204,13 +205,6 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
             <h4 style={panelHeaderStyle}>Динамическое распределение причин сбоев доступности (Real-Time Outage Breakdown)</h4>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginTop: '8px' }}>
               <div style={breakdownCardStyle}>
-                <span style={{ fontSize: '11px', color: '#aaa' }}>Затмение & Тень Земли</span>
-                <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#c084fc' }}>
-                  {((shadowCount / (totalSatsCount || 1)) * 100).toFixed(1)}%
-                </span>
-                <span style={{ fontSize: '10px', color: '#777' }}>{shadowCount} КА на аккумуляторах</span>
-              </div>
-              <div style={breakdownCardStyle}>
                 <span style={{ fontSize: '11px', color: '#aaa' }}>Аварийные отказы узлов</span>
                 <span style={{ fontSize: '18px', fontWeight: 'bold', color: offlineCount > 0 ? '#ff3b30' : '#00ff88' }}>
                   {((offlineCount / (totalSatsCount || 1)) * 100).toFixed(1)}%
@@ -224,12 +218,6 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
               </div>
             </div>
           </div>
-
-          <EmergencyRecommendationsModal
-            scenario={scenario}
-            outages={outages}
-            onApplyRecommendation={onApplyRecommendation || (() => {})}
-          />
         </div>
       )}
 
@@ -307,7 +295,7 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h4 style={{ margin: 0, fontSize: '13px', color: '#ccc' }}>
-              Диаграмма Гантта: Сеансы связи и окна затмения (Курсор T = {formatSimTime(currentTime)})
+              Диаграмма Гантта: Сеансы связи (Курсор T = {formatSimTime(currentTime)})
             </h4>
           </div>
 
@@ -324,8 +312,6 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
             {['S01 (Плоскость 1)', 'S02 (Плоскость 1)', 'S09 (Плоскость 2)', 'S10 (Плоскость 2)', 'S17 (Плоскость 3)', 'S18 (Плоскость 3)'].map((satName, idx) => {
               const satId = satName.split(' ')[0];
               const isSatOffline = offlineSet.has(satId);
-              const satObj = dynamicSats.find(s => s.id === satId);
-              const isSatInShadow = satObj ? !satObj.is_in_sunlight : false;
 
               // Timeline progress percentage (0..100%)
               const cursorPct = ((currentTime % 86400) / 86400) * 100;
@@ -348,7 +334,7 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
                     <div style={{
                       position: 'absolute',
                       left: `${(idx * 15) % 40}%`,
-                      width: '38%',
+                      width: '58%',
                       height: '100%',
                       backgroundColor: isSatOffline ? '#ff3b3040' : '#1473e690',
                       borderRadius: '3px',
@@ -360,24 +346,6 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
                       fontWeight: 600
                     }}>
                       {isSatOffline ? 'Аварийный отказ' : 'Сеанс связи'}
-                    </div>
-
-                    {/* Eclipse Shadow Window Blocks */}
-                    <div style={{
-                      position: 'absolute',
-                      left: `${((idx * 15) % 40) + 38}%`,
-                      width: '20%',
-                      height: '100%',
-                      backgroundColor: '#2a324b60',
-                      borderLeft: '1px dashed #3a425b',
-                      borderRadius: '3px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      paddingLeft: '6px',
-                      fontSize: '10px',
-                      color: '#94a3b8'
-                    }}>
-                      Резерв
                     </div>
 
                     {/* Live Time Cursor Line */}
@@ -748,102 +716,6 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
                 </div>
               );
             })()}
-          </div>
-
-          {/* Economic Recommendations Section */}
-          <div style={{ backgroundColor: '#192231', border: '1px solid #1473e650', borderRadius: '6px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#00ff88', fontWeight: 600 }}>
-                <DollarSign size={16} />
-                <span>Экономически Обоснованные Рекомендации по Изменению Состава КА</span>
-              </div>
-              <span style={{ fontSize: '10px', color: '#aaa' }}>Кликните по предложению для применения</span>
-            </div>
-
-            {!isSlaBreached ? (
-              <div style={{ padding: '12px', backgroundColor: '#00ff8815', border: '1px solid #00ff8850', borderRadius: '4px', color: '#00ff88', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <CheckCircle2 size={16} />
-                <span>Нормативный SLA выдержан (≥ 90%). Корректировка состава КА и дополнительные рекомендации не требуются.</span>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {[
-                  {
-                    id: 1,
-                    title: '💰 [САМЫЙ ВЫГОДНЫЙ ВАРИАНТ] Перенастройка сетки ISL & Перефазирование орбит (+15°)',
-                    desc: 'Затраты: $50,000 (микро-расход ксенонового топлива). Исключает сбои SLA 99.9% и дает чистую экономию $3,270,000 по сравнению с закупкой и запуском новых аппаратов.',
-                    actionText: 'Применить перенастройку сетки (Экономия $3.27M)'
-                  },
-                  {
-                    id: 2,
-                    title: '🌱 [БЕСПЛАТНАЯ ОПТИМИЗАЦИЯ ($0)] Программная балансировка терморежима КА',
-                    desc: 'Затраты: $0 (программный перерасчет таблицы маршрутов). Снимает перегрев с узлов T ≥ 80°C, продлевает ресурс ЭРДУ ксенона на 1.8 года и экономит $450,000/год на ТО.',
-                    actionText: 'Применить программную термо-балансировку ($0)'
-                  },
-                  {
-                    id: 3,
-                    title: '🎯 [ОПТИМИЗАЦИЯ РЕСУРСА] Изъятие 2 дублирующих КА из плоскости P3',
-                    desc: 'Анализ перекрытия показал 98.4% резервирования. Изъятие 2 аппаратов сбережет $1,300,000 CAPEX и $90,000/год OPEX без риска нарушения SLA.',
-                    actionText: 'Применить оптимизацию CAPEX (+$1.39M)'
-                  }
-                ].filter(rec => !dismissedEconRecs.has(rec.id)).map(rec => (
-                  <div
-                    key={rec.id}
-                    onClick={() => {
-                      setDismissedEconRecs(prev => new Set(prev).add(rec.id));
-                      if (onApplyRecommendation) onApplyRecommendation('phase_shift');
-                    }}
-                    style={{
-                      backgroundColor: '#121212',
-                      border: '1px solid #333',
-                      borderLeft: '4px solid #00ff88',
-                      borderRadius: '4px',
-                      padding: '10px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '6px'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <b style={{ color: '#fff', fontSize: '12px' }}>{rec.title}</b>
-                      <span style={{ fontSize: '10px', color: '#00ff88' }}>[Нажмите, чтобы применить и убрать]</span>
-                    </div>
-                    <p style={{ fontSize: '11px', color: '#ccc', margin: 0 }}>{rec.desc}</p>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDismissedEconRecs(prev => new Set(prev).add(rec.id));
-                        if (onApplyRecommendation) onApplyRecommendation('phase_shift');
-                      }}
-                      style={{
-                        backgroundColor: '#1473e6',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '3px',
-                        padding: '4px 8px',
-                        fontSize: '11px',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        alignSelf: 'flex-start',
-                        marginTop: '4px'
-                      }}
-                    >
-                      <span>{rec.actionText}</span>
-                      <ArrowRight size={12} />
-                    </button>
-                  </div>
-                ))}
-
-                  <div style={{ padding: '10px', backgroundColor: '#00ff8815', border: '1px solid #00ff8850', borderRadius: '4px', color: '#00ff88', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <CheckCircle2 size={14} />
-                    <span>Все экономические рекомендации применены. Затраты и топливный баланс оптимизированы.</span>
-                  </div>
-              </div>
-            )}
           </div>
         </div>
       )}

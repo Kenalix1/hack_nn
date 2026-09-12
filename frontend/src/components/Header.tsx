@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, RotateCcw, Layers, BarChart2, Settings, Copy, PanelRight, ShieldAlert, FileText, Map, Globe } from 'lucide-react';
+import { Play, RotateCcw, Layers, BarChart2, Settings, Copy, PanelRight, ShieldAlert, FileText, Map, Globe, Activity, Lightbulb } from 'lucide-react';
 
 interface HeaderProps {
   scenarios: Array<{ id: string; title: string }>;
@@ -334,13 +334,6 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Brand & Scenario Selector & Upload */}
       <div className="hdr-section">
-        <div className="hdr-brand" title="Система Анализа Группировки">
-          <div className="hdr-brand-icon">
-            <Layers size={16} />
-          </div>
-        </div>
-
-        <div className="hdr-divider" />
 
         <button
           onClick={() => onOpenWindow('scenarios')}
@@ -391,10 +384,10 @@ export const Header: React.FC<HeaderProps> = ({
                 borderRadius: '4px',
                 fontWeight: 600
               }}
-              title="Переключить рабочую область на 2D карту OpenStreetMap (без флагов)"
+              title="Переключить рабочую область на 2D карту орбит"
             >
               <Map size={13} />
-              <span>2D OpenStreetMap</span>
+              <span>2D Карта</span>
             </button>
           </div>
         )}
@@ -421,14 +414,19 @@ export const Header: React.FC<HeaderProps> = ({
           <span>Аналитика & Гантт</span>
         </button>
 
+        <button onClick={() => onOpenWindow('recommendations')} className="hdr-btn hdr-btn-secondary" title="Инженерные рекомендации и синтез оптимальной группировки">
+          <Lightbulb size={14} style={{ color: '#fbbf24' }} />
+          <span>Рекомендации</span>
+        </button>
+
         <button onClick={() => onOpenWindow('configurator')} className="hdr-btn hdr-btn-secondary">
           <Settings size={14} style={{ color: '#a78bfa' }} />
           <span>Конфигуратор</span>
         </button>
 
-        <button onClick={() => onOpenWindow('compare')} className="hdr-btn hdr-btn-secondary">
+        <button onClick={() => onOpenWindow('compare')} className="hdr-btn hdr-btn-secondary" title="Анализ комбинаций отказов и вариантов восстановления">
           <Copy size={14} style={{ color: '#fbbf24' }} />
-          <span>Сравнение Проектов</span>
+          <span>Анализ Отказов</span>
         </button>
 
         {onOpenPdfReport && (
@@ -453,6 +451,27 @@ export const Header: React.FC<HeaderProps> = ({
             <span>Сбросить</span>
           </button>
         )}
+
+        <button
+          onClick={onToggleSidebar}
+          style={{
+            width: '32px',
+            height: '32px',
+            padding: 0,
+            borderRadius: '6px',
+            backgroundColor: isSidebarOpen ? '#1e293b' : '#0284c7',
+            border: `1px solid ${isSidebarOpen ? '#333943' : '#38bdf8'}`,
+            color: '#ffffff',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            marginLeft: 'auto'
+          }}
+          title={isSidebarOpen ? "Скрыть правую панель аутлайнера" : "Показать правую панель аутлайнера"}
+        >
+          <PanelRight size={16} style={{ color: isSidebarOpen ? '#94a3b8' : '#ffffff' }} />
+        </button>
       </div>
 
     </header>

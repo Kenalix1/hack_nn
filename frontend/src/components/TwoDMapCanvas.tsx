@@ -24,11 +24,13 @@ export const TwoDMapCanvas: React.FC<TwoDMapCanvasProps> = ({
   // Map Tile Style: Black & White Dark / Black & White Light / Standard
   const [tileStyle, setTileStyle] = useState<'bw_dark' | 'bw_light' | 'standard'>('bw_dark');
 
-  // Layers Visibility State
-  const [showISL, setShowISL] = useState<boolean>(true);
-  const [showFOVs, setShowFOVs] = useState<boolean>(true);
-  const [showTracks, setShowTracks] = useState<boolean>(true);
-  const [showGateways, setShowGateways] = useState<boolean>(true);
+  // Layers Visibility from GlobalSettingsMenu (matching 3D map settings)
+  const showTracks = settings?.showOrbits !== false;
+  const showFOVs = settings?.showCoverageHeatmap !== false;
+  const showISL = settings?.showISL !== false;
+  const showGateways = settings?.showGateways !== false;
+  const showSatellites = settings?.showSatellites !== false;
+  const showLabels = settings?.showLabels !== false;
 
   // Viewport State: Center Lat/Lon & Zoom Level
   const [center, setCenter] = useState<{ lat: number; lon: number }>({ lat: 60.0, lon: 60.0 });
@@ -274,7 +276,7 @@ export const TwoDMapCanvas: React.FC<TwoDMapCanvasProps> = ({
 
     // 3. Draw Orbit Ground Tracks
     if (showTracks && scenario?.satellites) {
-      ctx.strokeStyle = tileStyle !== 'standard' ? '#38bdf860' : '#2563eb60';
+      ctx.strokeStyle = tileStyle !== 'standard' ? '#38bdf880' : '#2563eb80';
       ctx.lineWidth = 1.5;
 
       const planes: Record<number, any[]> = {};
@@ -284,20 +286,44 @@ export const TwoDMapCanvas: React.FC<TwoDMapCanvasProps> = ({
         planes[p].push(s);
       });
 
-      Object.values(planes).forEach(planeSats => {
-        if (planeSats.length === 0) return;
-        ctx.beginPath();
-        const sampleSat = planeSats[0];
+      const omegaE = 7.2921159e-5;
+      const gmstDeg = (omegaE * currentTime * 180) / Math.PI;
+      const earthAngle0Deg = 12.0;
 
+      Object.entries(planes).forEach(([pStr, planeSats]) => {
+        if (planeSats.length === 0) return;
+        const planeNum = parseInt(pStr, 10);
+        if (settings?.hiddenPlanes?.[planeNum]) return;
+
+        const sampleSat = planeSats[0];
+        const baseRaanDeg = sampleSat.raan ?? (planeNum - 1) * 90;
+        const raanOffsetDeg = settings?.planeRaanMap?.[planeNum] ?? 0;
+        const totalRaanRad = ((baseRaanDeg + raanOffsetDeg) % 360) * (Math.PI / 180);
+        const incRad = (sampleSat.inc || 53.0) * (Math.PI / 180);
+
+        ctx.beginPath();
         let prevX = 0;
         let first = true;
-        for (let step = 0; step <= 80; step++) {
-          const tSample = currentTime + (step / 80) * 5700;
-          const pt = computeSubPoint(sampleSat, tSample);
-          const sx = toScreenX(pt.lon);
-          const sy = toScreenY(pt.lat);
+        const STEPS = 140;
 
-          if (!first && Math.abs(sx - prevX) > width * 0.5) {
+        for (let step = 0; step <= STEPS; step++) {
+          const u = (step / STEPS) * Math.PI * 2;
+
+          const xEci = Math.cos(totalRaanRad) * Math.cos(u) - Math.sin(totalRaanRad) * Math.sin(u) * Math.cos(incRad);
+          const zEci = Math.sin(totalRaanRad) * Math.cos(u) + Math.cos(totalRaanRad) * Math.sin(u) * Math.cos(incRad);
+          const yEci = Math.sin(u) * Math.sin(incRad);
+
+          const latRad = Math.asin(Math.max(-1, Math.min(1, yEci)));
+          const latDeg = (latRad * 180) / Math.PI;
+
+          const eciLonRad = Math.atan2(zEci, xEci);
+          let lonDeg = (eciLonRad * 180) / Math.PI - earthAngle0Deg - gmstDeg;
+          lonDeg = ((lonDeg % 360) + 540) % 360 - 180;
+
+          const sx = toScreenX(lonDeg);
+          const sy = toScreenY(latDeg);
+
+          if (!first && Math.abs(sx - prevX) > width * 0.4) {
             ctx.stroke();
             ctx.beginPath();
             ctx.moveTo(sx, sy);
@@ -367,48 +393,54 @@ export const TwoDMapCanvas: React.FC<TwoDMapCanvasProps> = ({
       gws.forEach(gw => {
         const gx = toScreenX(gw.lon);
         const gy = toScreenY(gw.lat);
+        const isGwOffline = !!settings?.offlineGateways?.[gw.id];
 
-        ctx.fillStyle = '#fbbf24';
+        ctx.fillStyle = isGwOffline ? '#ff3b30' : '#fbbf24';
         ctx.beginPath();
-        ctx.arc(gx, gy, 6, 0, Math.PI * 2);
+        ctx.arc(gx, gy, isGwOffline ? 8 : 6, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.strokeStyle = '#000000';
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        ctx.fillStyle = tileStyle !== 'standard' ? '#ffffff' : '#0f172a';
+        ctx.fillStyle = isGwOffline ? '#ff3b30' : (tileStyle !== 'standard' ? '#ffffff' : '#0f172a');
         ctx.font = 'bold 11px monospace';
-        ctx.fillText(gw.name || gw.id, gx + 9, gy + 4);
+        const labelText = isGwOffline ? `${gw.name || gw.id} [АВАРИЯ]` : (gw.name || gw.id);
+        ctx.fillText(labelText, gx + 9, gy + 4);
       });
     }
 
     // 7. Draw Satellites
-    satList.forEach(sat => {
-      const color = sat.isOffline
-        ? '#ff3b30'
-        : sat.telemetry.overheated
-        ? '#fbbf24'
-        : '#00ff88';
+    if (showSatellites) {
+      satList.forEach(sat => {
+        const color = sat.isOffline
+          ? '#ff3b30'
+          : sat.telemetry.overheated
+          ? '#fbbf24'
+          : '#00ff88';
 
-      // Sat halo
-      ctx.fillStyle = color + '40';
-      ctx.beginPath();
-      ctx.arc(sat.screenX, sat.screenY, 9, 0, Math.PI * 2);
-      ctx.fill();
+        // Sat halo
+        ctx.fillStyle = color + '40';
+        ctx.beginPath();
+        ctx.arc(sat.screenX, sat.screenY, 9, 0, Math.PI * 2);
+        ctx.fill();
 
-      // Sat core
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(sat.screenX, sat.screenY, 4, 0, Math.PI * 2);
-      ctx.fill();
+        // Sat core
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(sat.screenX, sat.screenY, 4, 0, Math.PI * 2);
+        ctx.fill();
 
-      ctx.fillStyle = sat.isOffline ? '#ff7777' : tileStyle !== 'standard' ? '#e2e8f0' : '#1e293b';
-      ctx.font = 'bold 10px monospace';
-      ctx.fillText(sat.id, sat.screenX + 7, sat.screenY - 3);
-    });
+        if (showLabels) {
+          ctx.fillStyle = sat.isOffline ? '#ff7777' : tileStyle !== 'standard' ? '#e2e8f0' : '#1e293b';
+          ctx.font = 'bold 10px monospace';
+          ctx.fillText(sat.id, sat.screenX + 7, sat.screenY - 3);
+        }
+      });
+    }
 
-  }, [scenario, outages, currentTime, settings, tileStyle, showISL, showFOVs, showTracks, showGateways, center, zoom, lonToX, latToY]);
+  }, [scenario, outages, currentTime, settings, tileStyle, showISL, showFOVs, showTracks, showGateways, showSatellites, showLabels, center, zoom, lonToX, latToY]);
 
   // Click handler
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -452,6 +484,34 @@ export const TwoDMapCanvas: React.FC<TwoDMapCanvasProps> = ({
     setSelectedNode(null);
   };
 
+  // Clamp center lat/lon so viewport edges never leave geographic map boundaries
+  const clampCenter = useCallback((lat: number, lon: number, z: number) => {
+    const canvas = canvasRef.current;
+    const w = canvas?.width || 1000;
+    const h = canvas?.height || 700;
+
+    const currentZoom = Math.floor(z);
+    const scale = Math.pow(2, z - currentZoom);
+    const totalMapPx = Math.pow(2, currentZoom) * 256 * scale;
+
+    // Latitude clamping (Mercator limit 78 deg)
+    const halfLatSpan = (h / 2) * (180 / totalMapPx);
+    const maxCenterLat = Math.max(0, 78.0 - halfLatSpan);
+    const clampedLat = Math.max(-maxCenterLat, Math.min(maxCenterLat, lat));
+
+    // Longitude clamping (-180 to +180 deg)
+    const halfLonSpan = (w / 2) * (360 / totalMapPx);
+    let clampedLon = lon;
+    if (halfLonSpan >= 180) {
+      clampedLon = 0;
+    } else {
+      const maxCenterLon = 180 - halfLonSpan;
+      clampedLon = Math.max(-maxCenterLon, Math.min(maxCenterLon, lon));
+    }
+
+    return { lat: clampedLat, lon: clampedLon };
+  }, []);
+
   // Drag Panning Handlers
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
@@ -470,15 +530,14 @@ export const TwoDMapCanvas: React.FC<TwoDMapCanvasProps> = ({
     const dLon = (dx / scale) * (360 / (Math.pow(2, currentZoom) * 256));
     const dLat = (dy / scale) * (180 / (Math.pow(2, currentZoom) * 256));
 
-    setCenter(prev => ({
-      lat: Math.max(-80, Math.min(80, prev.lat + dLat)),
-      lon: ((prev.lon - dLon + 540) % 360) - 180
-    }));
+    setCenter(prev => clampCenter(prev.lat + dLat, prev.lon - dLon, zoom));
   };
 
   const handleWheel = (e: React.WheelEvent) => {
     const delta = e.deltaY < 0 ? 0.25 : -0.25;
-    setZoom(z => Math.max(2.0, Math.min(8.0, Number((z + delta).toFixed(2)))));
+    const nextZoom = Math.max(2.0, Math.min(8.0, Number((zoom + delta).toFixed(2))));
+    setZoom(nextZoom);
+    setCenter(prev => clampCenter(prev.lat, prev.lon, nextZoom));
   };
 
   const handleMouseUp = () => setIsDragging(false);
@@ -492,16 +551,16 @@ export const TwoDMapCanvas: React.FC<TwoDMapCanvasProps> = ({
       overflow: 'hidden',
       userSelect: 'none'
     }}>
-      {/* OSM Control Bar */}
+      {/* 2D Map Control Bar - Positioned Top Right to leave GlobalSettingsMenu (top-left) free */}
       <div style={{
         position: 'absolute',
         top: '16px',
-        left: '16px',
+        right: '70px',
         zIndex: 90,
         backgroundColor: '#121722dd',
         border: '1px solid #1e293b',
         borderRadius: '8px',
-        padding: '8px 12px',
+        padding: '6px 12px',
         display: 'flex',
         alignItems: 'center',
         gap: '10px',
@@ -511,11 +570,11 @@ export const TwoDMapCanvas: React.FC<TwoDMapCanvasProps> = ({
         color: '#f8fafc'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: '#38bdf8' }}>
-          <Map size={16} />
-          <span>OpenStreetMap 2D (Без Флагов)</span>
+          <Map size={15} />
+          <span>2D Карта Группировки</span>
         </div>
 
-        <div style={{ width: '1px', height: '18px', backgroundColor: '#333943' }} />
+        <div style={{ width: '1px', height: '16px', backgroundColor: '#333943' }} />
 
         {/* Tile Style Selector */}
         <button
@@ -524,31 +583,10 @@ export const TwoDMapCanvas: React.FC<TwoDMapCanvasProps> = ({
           title="Переключить стилевой режим подложки карты"
         >
           <Globe size={13} />
-          <span>{tileStyle === 'bw_dark' ? 'Ч/Б Тёмный' : tileStyle === 'bw_light' ? 'Ч/Б Светлый' : 'Цветной OSM'}</span>
+          <span>{tileStyle === 'bw_dark' ? 'Ч/Б Тёмный' : tileStyle === 'bw_light' ? 'Ч/Б Светлый' : 'Цветной'}</span>
         </button>
 
-        {/* Layer Toggles */}
-        <button onClick={() => setShowISL(!showISL)} style={ctrlBtnStyle(showISL)} title="Переключить линии связи ISL">
-          {showISL ? <Eye size={13} /> : <EyeOff size={13} />}
-          <span>ISL</span>
-        </button>
-
-        <button onClick={() => setShowFOVs(!showFOVs)} style={ctrlBtnStyle(showFOVs)} title="Переключить пятна зоны покрытия">
-          {showFOVs ? <Eye size={13} /> : <EyeOff size={13} />}
-          <span>FOV</span>
-        </button>
-
-        <button onClick={() => setShowTracks(!showTracks)} style={ctrlBtnStyle(showTracks)} title="Переключить трассы орбит">
-          {showTracks ? <Eye size={13} /> : <EyeOff size={13} />}
-          <span>Трассы</span>
-        </button>
-
-        <button onClick={() => setShowGateways(!showGateways)} style={ctrlBtnStyle(showGateways)} title="Переключить шлюзы">
-          {showGateways ? <Eye size={13} /> : <EyeOff size={13} />}
-          <span>Шлюзы</span>
-        </button>
-
-        <div style={{ width: '1px', height: '18px', backgroundColor: '#333943' }} />
+        <div style={{ width: '1px', height: '16px', backgroundColor: '#333943' }} />
 
         {/* Zoom Controls */}
         <button onClick={() => setZoom(z => Math.min(8.0, z + 0.5))} style={iconBtnStyle} title="Приблизить">

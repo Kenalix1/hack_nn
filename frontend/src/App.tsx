@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Header } from './components/Header';
 import { OutlinerPanel } from './components/OutlinerPanel';
 import { GlobalSettingsMenu } from './components/GlobalSettingsMenu';
@@ -14,6 +14,7 @@ import { SatelliteOutageModal } from './components/SatelliteOutageModal';
 import { EmergencyModal } from './components/EmergencyModal';
 import { ScenariosModal } from './components/ScenariosModal';
 import { TwoDMapCanvas } from './components/TwoDMapCanvas';
+import { RecommendationsModal } from './components/RecommendationsModal';
 import { ScenarioData, OutlinerSettings, LogMessage, Satellite, SatelliteOutage } from './types';
 import { openPdfReport } from './utils/generatePdfReport';
 import { Eye, RotateCcw } from 'lucide-react';
@@ -65,9 +66,12 @@ const defaultOutlinerSettings: OutlinerSettings = {
   fovConeColor: '#ffffff',
   planeRaanMap: {},
   planePhaseMap: {},
+  planeIncMap: {},
+  planeAltMap: {},
   hiddenPlanes: {},
   hiddenSatellites: {},
-  hiddenGateways: {}
+  hiddenGateways: {},
+  offlineGateways: {}
 };
 
 const defaultWindows: Record<string, { isOpen: boolean; zIndex: number }> = {
@@ -77,7 +81,8 @@ const defaultWindows: Record<string, { isOpen: boolean; zIndex: number }> = {
   compare: { isOpen: false, zIndex: 12 },
   emergency: { isOpen: false, zIndex: 13 },
   scenarios: { isOpen: false, zIndex: 14 },
-  satellite_detail: { isOpen: false, zIndex: 15 }
+  satellite_detail: { isOpen: false, zIndex: 15 },
+  recommendations: { isOpen: false, zIndex: 16 }
 };
 
 export const App: React.FC = () => {
@@ -116,9 +121,12 @@ export const App: React.FC = () => {
       ...saved,
       planeRaanMap: saved.planeRaanMap || {},
       planePhaseMap: saved.planePhaseMap || {},
+      planeIncMap: saved.planeIncMap || {},
+      planeAltMap: saved.planeAltMap || {},
       hiddenPlanes: saved.hiddenPlanes || {},
       hiddenSatellites: saved.hiddenSatellites || {},
       hiddenGateways: saved.hiddenGateways || {},
+      offlineGateways: saved.offlineGateways || {},
       satColor: saved.satColor || '#ffffff',
       offlineSatColor: saved.offlineSatColor || '#e11d48',
       highLatencySatColor: saved.highLatencySatColor || '#d97706',
@@ -133,7 +141,8 @@ export const App: React.FC = () => {
 
   // Windows Open State & Z-Index Management
   const [windows, setWindows] = useState<Record<string, { isOpen: boolean; zIndex: number }>>(() => {
-    const savedWins = initialSaved?.windows || {};
+    const savedWins = { ...(initialSaved?.windows || {}) };
+    delete savedWins.mass_sim;
     return {
       ...defaultWindows,
       ...savedWins
@@ -813,14 +822,16 @@ export const App: React.FC = () => {
           />
         </div>
 
-        <OutlinerPanel
-          settings={outlinerSettings}
-          onChangeSettings={setOutlinerSettings}
-          isOpen={isSidebarOpen}
-          scenario={scenarioData}
-          focusedSatelliteId={focusedSatelliteId}
-          onSelectSatellite={handleSelectSatellite}
-        />
+        {isSidebarOpen && (
+          <OutlinerPanel
+            settings={outlinerSettings}
+            onChangeSettings={setOutlinerSettings}
+            isOpen={isSidebarOpen}
+            scenario={scenarioData}
+            focusedSatelliteId={focusedSatelliteId}
+            onSelectSatellite={handleSelectSatellite}
+          />
+        )}
 
         {/* Draggable Satellite Management & Active Route Modal */}
         <DraggableWindow
@@ -879,13 +890,13 @@ export const App: React.FC = () => {
           />
         </DraggableWindow>
 
-        {/* Windows: Project Compare */}
+        {/* Windows: Project Compare / Combination Analysis */}
         <DraggableWindow
           id="compare"
-          title="Панель Монте-Карло (Big Data Analysis)"
-          isOpen={windows.compare.isOpen}
+          title="Анализ Комбинаций Отказов и Сравнение"
+          isOpen={windows.compare?.isOpen}
           onClose={() => closeWindow('compare')}
-          zIndex={windows.compare.zIndex}
+          zIndex={windows.compare?.zIndex || 12}
           onFocus={() => focusWindow('compare')}
           initialPos={{ x: 100, y: 100, width: 900, height: 600 }}
         >
@@ -930,6 +941,27 @@ export const App: React.FC = () => {
             onDeleteScenario={handleDeleteScenario}
             onExportScenarioJson={handleExportScenarioJson}
             onOpenConfigurator={() => openWindow('configurator')}
+          />
+        </DraggableWindow>
+
+        {/* Windows: Recommendations & Auto-Optimizer */}
+        <DraggableWindow
+          id="recommendations"
+          title="Инженерные Рекомендации и Авто-Оптимизация Группировки"
+          isOpen={windows.recommendations?.isOpen}
+          onClose={() => closeWindow('recommendations')}
+          zIndex={windows.recommendations?.zIndex || 17}
+          onFocus={() => focusWindow('recommendations')}
+          initialPos={{ x: 80, y: 70, width: 940, height: 620 }}
+        >
+          <RecommendationsModal
+            scenario={scenarioData}
+            outages={currentOutages}
+            outlinerSettings={outlinerSettings}
+            onUpdateSettings={(newSettings) => setOutlinerSettings(prev => ({ ...prev, ...newSettings }))}
+            onClearOutages={handleClearOutages}
+            onOpenWindow={openWindow}
+            onOpenPdfReport={() => openPdfReport(scenarioData)}
           />
         </DraggableWindow>
 

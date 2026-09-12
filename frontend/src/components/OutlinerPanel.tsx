@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Layers, Compass, ChevronDown, ChevronRight, RadioReceiver, MapPin, Eye, EyeOff } from 'lucide-react';
+import { Layers, Compass, ChevronDown, ChevronRight, RadioReceiver, MapPin, Eye, EyeOff, ShieldAlert } from 'lucide-react';
 import { OutlinerSettings, ScenarioData, Satellite } from '../types';
 
 interface OutlinerPanelProps {
@@ -49,8 +49,6 @@ export const OutlinerPanel: React.FC<OutlinerPanelProps> = ({
     }
   }, [focusedSatelliteId, scenario]);
 
-  if (!isOpen) return null;
-
   const updateSetting = <K extends keyof OutlinerSettings>(key: K, value: OutlinerSettings[K]) => {
     onChangeSettings({
       ...settings,
@@ -58,22 +56,54 @@ export const OutlinerPanel: React.FC<OutlinerPanelProps> = ({
     });
   };
 
-  const handleRaanChange = (planeId: number, val: number) => {
+  const handleRaanChange = (planeNum: number, val: number) => {
     onChangeSettings({
       ...settings,
       planeRaanMap: {
         ...(settings?.planeRaanMap || {}),
-        [planeId]: val
+        [planeNum]: val
       }
     });
   };
 
-  const handlePhaseChange = (planeId: number, val: number) => {
+  const handlePhaseChange = (planeNum: number, val: number) => {
     onChangeSettings({
       ...settings,
       planePhaseMap: {
         ...(settings?.planePhaseMap || {}),
-        [planeId]: val
+        [planeNum]: val
+      }
+    });
+  };
+
+  const handleIncChange = (planeNum: number, val: number) => {
+    onChangeSettings({
+      ...settings,
+      planeIncMap: {
+        ...(settings?.planeIncMap || {}),
+        [planeNum]: val
+      }
+    });
+  };
+
+  const handleAltChange = (planeNum: number, val: number) => {
+    onChangeSettings({
+      ...settings,
+      planeAltMap: {
+        ...(settings?.planeAltMap || {}),
+        [planeNum]: val
+      }
+    });
+  };
+
+  const handleToggleGatewayOffline = (gwId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const isCurrentlyOffline = !!settings?.offlineGateways?.[gwId];
+    onChangeSettings({
+      ...settings,
+      offlineGateways: {
+        ...(settings?.offlineGateways || {}),
+        [gwId]: !isCurrentlyOffline
       }
     });
   };
@@ -288,6 +318,8 @@ export const OutlinerPanel: React.FC<OutlinerPanelProps> = ({
       </div>
     );
   };
+
+  if (!isOpen) return null;
 
   return (
     <aside style={{
@@ -569,7 +601,7 @@ export const OutlinerPanel: React.FC<OutlinerPanelProps> = ({
               {/* 2. Phase Slider */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#e0e0e0' }}>
-                  <span><b>2. Фазирование (Сдвиг бусин):</b></span>
+                  <span><b>2. Фазирование (Сдвиг вдоль кольца):</b></span>
                   <span style={{ color: '#00ff88', fontWeight: 'bold' }}>{settings?.planePhaseMap?.[selectedItem.id] ?? 0}°</span>
                 </div>
                 <p style={{ fontSize: '10px', color: '#888', margin: 0 }}>
@@ -583,6 +615,46 @@ export const OutlinerPanel: React.FC<OutlinerPanelProps> = ({
                   value={settings?.planePhaseMap?.[selectedItem.id] ?? 0}
                   onChange={(e) => handlePhaseChange(selectedItem.id, parseFloat(e.target.value))}
                   style={{ ...sliderStyle, accentColor: '#00ff88' }}
+                />
+              </div>
+
+              {/* 3. Inclination Slider */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#e0e0e0' }}>
+                  <span><b>3. Наклонение плоскости (Inc):</b></span>
+                  <span style={{ color: '#a78bfa', fontWeight: 'bold' }}>{settings?.planeIncMap?.[selectedItem.id] ?? 87}°</span>
+                </div>
+                <p style={{ fontSize: '10px', color: '#888', margin: 0 }}>
+                  Задает угол наклонения орбитальной плоскости к экватору.
+                </p>
+                <input
+                  type="range"
+                  min="0"
+                  max="120"
+                  step="1"
+                  value={settings?.planeIncMap?.[selectedItem.id] ?? 87}
+                  onChange={(e) => handleIncChange(selectedItem.id, parseFloat(e.target.value))}
+                  style={{ ...sliderStyle, accentColor: '#a78bfa' }}
+                />
+              </div>
+
+              {/* 4. Altitude Slider */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#e0e0e0' }}>
+                  <span><b>4. Высота орбиты (Altitude):</b></span>
+                  <span style={{ color: '#fbbf24', fontWeight: 'bold' }}>{settings?.planeAltMap?.[selectedItem.id] ?? 550} км</span>
+                </div>
+                <p style={{ fontSize: '10px', color: '#888', margin: 0 }}>
+                  Изменяет высоту полета спутников текущей плоскости.
+                </p>
+                <input
+                  type="range"
+                  min="300"
+                  max="2000"
+                  step="10"
+                  value={settings?.planeAltMap?.[selectedItem.id] ?? 550}
+                  onChange={(e) => handleAltChange(selectedItem.id, parseFloat(e.target.value))}
+                  style={{ ...sliderStyle, accentColor: '#fbbf24' }}
                 />
               </div>
             </div>
@@ -698,6 +770,35 @@ export const OutlinerPanel: React.FC<OutlinerPanelProps> = ({
                       {settings.showGatewayCoverage !== false ? '20% непрозрачность' : 'Скрыт'}
                     </span>
                   </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #333' }}>
+                    <span style={{ color: '#aaa' }}>Статус связи</span>
+                    <span style={{ color: settings?.offlineGateways?.[gw.id] ? '#ff3b30' : '#00ff88', fontWeight: 'bold' }}>
+                      {settings?.offlineGateways?.[gw.id] ? 'ОТКАЗ (OFFLINE)' : 'ШТАТНО (ACTIVE)'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => handleToggleGatewayOffline(gw.id, e)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      padding: '8px 12px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      backgroundColor: settings?.offlineGateways?.[gw.id] ? '#ff3b30' : '#1e293b',
+                      color: settings?.offlineGateways?.[gw.id] ? '#ffffff' : '#ff4d4f',
+                      border: `1px solid ${settings?.offlineGateways?.[gw.id] ? '#ff3b30' : '#7f1d1d'}`,
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      marginTop: '6px',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <ShieldAlert size={14} />
+                    <span>{settings?.offlineGateways?.[gw.id] ? 'ВОССТАНОВИТЬ ШЛЮЗ' : 'ИМИТИРОВАТЬ АВАРИЮ ШЛЮЗА'}</span>
+                  </button>
                 </div>
               </div>
             );

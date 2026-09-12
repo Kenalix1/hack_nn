@@ -254,6 +254,63 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
           </div>
         </div>
 
+        {/* Section 1.5: Gateway Emergency Outages */}
+        <div style={{ backgroundColor: '#141822', border: '1px solid #1e293b', borderRadius: '6px', padding: '12px' }}>
+          <div style={{ fontWeight: 600, color: '#e2e8f0', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}>
+            <Radio size={14} style={{ color: '#ffaa00' }} />
+            <span>Управление аварийными отказами наземных шлюзовых станций (Gateways):</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(115px, 1fr))', gap: '6px' }}>
+            {[
+              { id: 'C65', name: 'Москва C65' },
+              { id: 'Pechora', name: 'Печора' },
+              { id: 'Murmansk', name: 'Мурманск' },
+              { id: 'Novosibirsk', name: 'Новосибирск' },
+              { id: 'Vladivostok', name: 'Владивосток' }
+            ].map(gw => {
+              const isOffline = !!outlinerSettings.offlineGateways?.[gw.id];
+              return (
+                <button
+                  key={gw.id}
+                  onClick={() => {
+                    const nextMap = {
+                      ...(outlinerSettings.offlineGateways || {}),
+                      [gw.id]: !isOffline
+                    };
+                    onUpdateSettings({
+                      ...outlinerSettings,
+                      offlineGateways: nextMap
+                    });
+                    if (!isOffline) {
+                      onAddLog(`📡 [Событие ЧС] Авария наземного шлюзового узла ${gw.name} (${gw.id})! Станция отключена.`, 'error');
+                    } else {
+                      onAddLog(`📡 [Восстановление] Шлюзовой узел ${gw.name} (${gw.id}) восстановлен и вернулся в строй.`, 'success');
+                    }
+                  }}
+                  style={{
+                    backgroundColor: isOffline ? '#ff3b3025' : '#1e293b',
+                    border: `1px solid ${isOffline ? '#ff3b30' : '#334155'}`,
+                    color: isOffline ? '#ff4d4f' : '#cbd5e1',
+                    borderRadius: '4px',
+                    padding: '6px 8px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                  }}
+                >
+                  <span>{gw.name}</span>
+                  <span style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '2px', backgroundColor: isOffline ? '#ff3b30' : '#00ff8820', color: isOffline ? '#fff' : '#00ff88' }}>
+                    {isOffline ? 'АВАРИЯ' : 'ОК'}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Section 2: Economic Recommendation Engine for Loss Compensation */}
         <div style={{
           backgroundColor: '#161d24',

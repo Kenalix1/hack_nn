@@ -151,9 +151,12 @@ export interface OutlinerSettings {
   fovConeColor: string;
   planeRaanMap: Record<number, number>;
   planePhaseMap: Record<number, number>;
+  planeIncMap?: Record<number, number>;
+  planeAltMap?: Record<number, number>;
   hiddenPlanes?: Record<number, boolean>;
   hiddenSatellites?: Record<string, boolean>;
   hiddenGateways?: Record<string, boolean>;
+  offlineGateways?: Record<string, boolean>;
 }
 
 export interface WindowState {

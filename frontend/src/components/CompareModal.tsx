@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Copy, ArrowRight, Settings, CheckCircle2, XCircle, Clock, ShieldCheck, Globe, Trophy, AlertTriangle, Zap, DollarSign, Activity, Play } from 'lucide-react';
 import { ScenarioData } from '../types';
-import { MassSimulationModal } from './MassSimulationModal';
 
 interface CompareModalProps {
   onOpenConfigurator?: () => void;
@@ -12,7 +11,6 @@ interface CompareModalProps {
 }
 
 export const CompareModal: React.FC<CompareModalProps> = ({ onOpenConfigurator, baseScenario, onVisualizeScenario, onClose, onSetCriticalSatellites }) => {
-  const [activeTab, setActiveTab] = useState<'compare' | 'mass_sim'>('compare');
   const [combinations, setCombinations] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,43 +59,17 @@ export const CompareModal: React.FC<CompareModalProps> = ({ onOpenConfigurator, 
       if (baseScenario && onVisualizeScenario) {
           const newScenario = JSON.parse(JSON.stringify(baseScenario));
           newScenario.failures = failures;
-          // We would actually need the simResult, but we can just pass the scenario and let App re-simulate
           onVisualizeScenario(newScenario, { satellites: [] }); 
           if (onClose) onClose();
       }
   };
 
-  if (activeTab === 'mass_sim') {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-        <div style={{ display: 'flex', gap: '10px', padding: '10px', borderBottom: '1px solid #333' }}>
-          <button onClick={() => setActiveTab('compare')} style={{ background: 'transparent', color: '#888', border: 'none', cursor: 'pointer' }}>Сравнение</button>
-          <button onClick={() => setActiveTab('mass_sim')} style={{ background: 'transparent', color: '#00ff88', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Monte Carlo Анализ</button>
-        </div>
-        <div style={{ flex: 1, overflowY: 'auto' }}>
-            <MassSimulationModal 
-                scenario={baseScenario} 
-                onClose={onClose || (() => {})} 
-                onDrillDown={handleDrillDown} 
-                onSetCriticalSatellites={onSetCriticalSatellites} 
-                failureProb={failureProb}
-                launchCost={launchCost}
-            />
-        </div>
-      </div>
-    );
-  }
-
   if (isConfiguring) {
     return (
       <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px', height: '100%', color: '#e0e0e0' }}>
-        <div style={{ display: 'flex', gap: '10px', paddingBottom: '10px', borderBottom: '1px solid #333' }}>
-          <button onClick={() => setActiveTab('compare')} style={{ background: 'transparent', color: '#00ff88', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Сравнение</button>
-          <button onClick={() => setActiveTab('mass_sim')} style={{ background: 'transparent', color: '#888', border: 'none', cursor: 'pointer' }}>Monte Carlo Анализ</button>
-        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid #333', paddingBottom: '12px' }}>
           <Settings size={24} style={{ color: '#00ff88' }} />
-          <h2 style={{ margin: 0, fontSize: '18px' }}>Настройка параметров симуляции (Базовая)</h2>
+          <h2 style={{ margin: 0, fontSize: '18px' }}>Анализ Проектов и Комбинаций Отказов</h2>
         </div>
         
         <p style={{ fontSize: '13px', color: '#aaa', lineHeight: '1.5' }}>

@@ -533,7 +533,9 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
       const isOffline = offlineSet.has(sat.id);
       const isHighLatency = !isOffline && highLatencySatSet.has(sat.id);
 
-      const altKm = sat.altitude || 550.0;
+      const altKm = (settings?.planeAltMap && settings.planeAltMap[planeNum] !== undefined)
+        ? settings.planeAltMap[planeNum]
+        : (sat.altitude || 550.0);
       const orbRadiusKm = 6371.0 + altKm;
       const rThree = earthRadius + (altKm / 1000.0) * 1.2;
 
@@ -575,7 +577,10 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
       const n = Math.sqrt(MU / Math.pow(orbRadiusKm, 3));
       const slotRad = slotDeg * (Math.PI / 180);
       const u = slotRad + totalPhaseRad + n * currentTime;
-      const inc = (sat.inc || 87.0) * (Math.PI / 180);
+      const incDeg = (settings?.planeIncMap && settings.planeIncMap[planeNum] !== undefined)
+        ? settings.planeIncMap[planeNum]
+        : (sat.inc || 87.0);
+      const inc = incDeg * (Math.PI / 180);
 
       // Pure ECI 3D Cartesian coordinates (Three.js frame: Y is North Pole, X-Z is Equatorial Plane)
       const xEci = rThree * (Math.cos(totalRaanRad) * Math.cos(u) - Math.sin(totalRaanRad) * Math.sin(u) * Math.cos(inc));
@@ -764,12 +769,17 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
         const sampleSat = planeMap[pNum][0]?.sat;
         if (!sampleSat) return;
 
-        const altKm = sampleSat.altitude || 550.0;
+        const altKm = (settings?.planeAltMap && settings.planeAltMap[pNum] !== undefined)
+          ? settings.planeAltMap[pNum]
+          : (sampleSat.altitude || 550.0);
         const rThree = earthRadius + (altKm / 1000.0) * 1.2;
         const baseRaanDeg = planeBaseMap[pNum]?.raanDeg ?? sampleSat.raan ?? ((pNum - 1) * 60);
         const raanOffsetDeg = (settings?.planeRaanMap && settings.planeRaanMap[pNum]) ?? 0;
         const totalRaanRad = ((baseRaanDeg + raanOffsetDeg) % 360) * (Math.PI / 180);
-        const inc = (sampleSat.inc || 87.0) * (Math.PI / 180);
+        const incDeg = (settings?.planeIncMap && settings.planeIncMap[pNum] !== undefined)
+          ? settings.planeIncMap[pNum]
+          : (sampleSat.inc || 87.0);
+        const inc = incDeg * (Math.PI / 180);
 
         const ringPoints: THREE.Vector3[] = [];
         const STEPS = 128;
@@ -820,10 +830,12 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
       gwPosMap[gw.id] = pos;
 
       const isGwVisible = !isGwHidden(gw.id);
+      const isGwOffline = !!settings?.offlineGateways?.[gw.id];
 
       if (settings.showGateways && isGwVisible) {
+        const dishColor = isGwOffline ? '#ff3b30' : (settings.gatewayColor || '#00d084');
         const dishTemplate = getCachedDishModel();
-        const dishObj = buildDish3DObject(dishTemplate, settings.gatewayColor || '#00d084', settings.satSize);
+        const dishObj = buildDish3DObject(dishTemplate, dishColor, settings.satSize);
         dishObj.position.copy(pos);
         // Align dish to point radially outward from Earth center into space
         const normal = pos.clone().normalize();
@@ -848,9 +860,9 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
           );
 
           const domeMat = new THREE.MeshBasicMaterial({
-            color: settings.gatewayColor || '#00d084',
+            color: dishColor,
             transparent: true,
-            opacity: 0.20,
+            opacity: isGwOffline ? 0.40 : 0.20,
             side: THREE.DoubleSide,
             depthWrite: false
           });
