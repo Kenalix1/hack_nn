@@ -960,12 +960,14 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
 
           if (settings.showDistances === true) {
             const distKm = Math.round(itemA.posKm.distanceTo(itemB.posKm));
-            const midPos = getArcMidPoint(itemA.pos, itemB.pos, 0.15);
-            const isFocused = itemA.sat.id === focusedSatelliteId || itemB.sat.id === focusedSatelliteId;
-            const labelStr = isTrafficMode ? `${distKm} км | ${simLoadPct}%` : `${distKm} км`;
-            const distSprite = createDistanceLabelSprite(labelStr, isFocused || simLoadPct > 80);
-            distSprite.position.copy(midPos);
-            labels.add(distSprite);
+            if (distKm > 0) {
+              const midPos = getArcMidPoint(itemA.pos, itemB.pos, 0.15);
+              const isFocused = itemA.sat.id === focusedSatelliteId || itemB.sat.id === focusedSatelliteId;
+              const labelStr = isTrafficMode ? `${distKm} км | ${simLoadPct}%` : `${distKm} км`;
+              const distSprite = createDistanceLabelSprite(labelStr, isFocused || simLoadPct > 80);
+              distSprite.position.copy(midPos);
+              labels.add(distSprite);
+            }
           }
         }
       });
@@ -1025,15 +1027,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
             const line = new THREE.Line(lineGeo, lineMat);
             islLines.add(line);
 
-            if (settings.showDistances === true) {
-              const distKm = Math.round(itemA.posKm.distanceTo(closestPosKm));
-              const midPos = getArcMidPoint(itemA.pos, closestPos, 0.15);
-              const isFocused = itemA.sat.id === focusedSatelliteId;
-              const labelStr = isTrafficMode ? `${distKm} км | ${simLoadPct}%` : `${distKm} км`;
-              const distSprite = createDistanceLabelSprite(labelStr, isFocused || simLoadPct > 80);
-              distSprite.position.copy(midPos);
-              labels.add(distSprite);
-            }
+
           }
         });
       }
@@ -1099,10 +1093,12 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
                 const gwPos = gwPosMap[nodeA] || gwPosMap[nodeB];
                 const satPos = gwPosMap[nodeA] ? posB : posA;
                 const distKm = calculateGroundToSatDistance(gwPos, satPos, scenarioAltKm);
-                const midPos = new THREE.Vector3().addVectors(posA, posB).multiplyScalar(0.51);
-                const distSprite = createDistanceLabelSprite(`${distKm} км`, true);
-                distSprite.position.copy(midPos);
-                labels.add(distSprite);
+                if (distKm > 0) {
+                  const midPos = new THREE.Vector3().addVectors(posA, posB).multiplyScalar(0.51);
+                  const distSprite = createDistanceLabelSprite(`${distKm} км`, true);
+                  distSprite.position.copy(midPos);
+                  labels.add(distSprite);
+                }
               }
 
               if (isGroundLink || isFocusedRoute) {
@@ -1169,10 +1165,12 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
 
           if (settings.showDistances === true) {
             const distKm = calculateGroundToSatDistance(gwPos, item.pos, scenarioAltKm);
-            const midPos = new THREE.Vector3().addVectors(gwPos, item.pos).multiplyScalar(0.51);
-            const distSprite = createDistanceLabelSprite(`${distKm} км`, true);
-            distSprite.position.copy(midPos);
-            labels.add(distSprite);
+            if (distKm > 0) {
+              const midPos = new THREE.Vector3().addVectors(gwPos, item.pos).multiplyScalar(0.51);
+              const distSprite = createDistanceLabelSprite(`${distKm} км`, true);
+              distSprite.position.copy(midPos);
+              labels.add(distSprite);
+            }
           }
 
           // Add Cisco Packet Tracer animated packets flying to/from ground station
