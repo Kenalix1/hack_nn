@@ -494,7 +494,7 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
                 <span>Балансировка Нагрузки Межспутниковых Линий (ISL Traffic Load & Bottlenecks)</span>
               </div>
               <span style={{ fontSize: '11px', color: '#94a3b8' }}>
-                Суммарная емкость: <b style={{ color: '#00ff88' }}>48.0 Гбит/с</b> | Задействовано: <b style={{ color: '#38bdf8' }}>{(31.2 + offlineCount * 2.8).toFixed(1)} Гбит/с</b>
+                Суммарная емкость: <b style={{ color: '#00ff88' }}>{totalSatsCount}.0 Гбит/с</b> | Задействовано: <b style={{ color: '#38bdf8' }}>{Math.min(totalSatsCount * 1.0, (totalSatsCount * 0.65 + offlineCount * 0.5)).toFixed(1)} Гбит/с</b>
               </span>
             </div>
 
@@ -676,16 +676,24 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
               const launchCostM = selectedRocket === 'soyuz' ? 35 : selectedRocket === 'angara' ? 48 : 62;
               const numLaunches = Math.ceil(totalSatsCount / cap);
               const totalLaunchM = numLaunches * launchCostM;
-              const satsCapexM = totalSatsCount * 0.65;
+              const unitCapexM = econData?.unit_capex_usd ? (econData.unit_capex_usd / 1e6) : 0.65;
+              const satsCapexM = totalSatsCount * unitCapexM;
               const totalCapexM = satsCapexM + totalLaunchM;
-              const costPerGbpsMo = Math.round((totalCapexM * 1e6) / (48 * 36));
+              const constellationGbps = Math.max(1, totalSatsCount);
+              const costPerGbpsMo = Math.round((totalCapexM * 1e6) / (constellationGbps * 36));
+
+              const formatLaunches = (n: number) => {
+                if (n % 10 === 1 && n % 100 !== 11) return `${n} пуск`;
+                if ([2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100)) return `${n} пуска`;
+                return `${n} пусков`;
+              };
 
               return (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px', marginTop: '4px' }}>
                   <div style={{ backgroundColor: '#0f1724', border: '1px solid #1473e630', borderRadius: '4px', padding: '8px 10px' }}>
                     <div style={{ fontSize: '10px', color: '#94a3b8' }}>Число пусков РКН</div>
                     <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#fff', marginTop: '2px' }}>
-                      {numLaunches} пуск{numLaunches > 1 ? (numLaunches > 4 ? 'ов' : 'а') : ''}
+                      {formatLaunches(numLaunches)}
                     </div>
                     <div style={{ fontSize: '10px', color: '#38bdf8' }}>по {cap} КА на ракете</div>
                   </div>
@@ -709,9 +717,9 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
                   <div style={{ backgroundColor: '#0f1724', border: '1px solid #1473e630', borderRadius: '4px', padding: '8px 10px' }}>
                     <div style={{ fontSize: '10px', color: '#94a3b8' }}>Удельная стоимость трафика</div>
                     <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#38bdf8', marginTop: '2px' }}>
-                      ${costPerGbpsMo}
+                      ${costPerGbpsMo.toLocaleString()}
                     </div>
-                    <div style={{ fontSize: '10px', color: '#aaa' }}>/ Гбит/с в месяц</div>
+                    <div style={{ fontSize: '10px', color: '#aaa' }}>/ Гбит/с в мес ({constellationGbps} Гбит/с, 3 года)</div>
                   </div>
                 </div>
               );
