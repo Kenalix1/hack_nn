@@ -21,6 +21,7 @@ interface ThreeCanvasProps {
   settings: OutlinerSettings;
   currentTime: number;
   outages: SatelliteOutage[];
+  criticalSatellites?: string[];
   focusedSatelliteId: string | null;
   onSelectSatellite: (sat: Satellite) => void;
   onResetCamera?: () => void;
@@ -31,6 +32,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
   settings,
   currentTime,
   outages,
+  criticalSatellites = [],
   focusedSatelliteId,
   onSelectSatellite
 }) => {
@@ -408,7 +410,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
 
     const onlineSatPosList: THREE.Vector3[] = [];
 
-    scenario.satellites.forEach(sat => {
+    (scenario.satellites || []).forEach(sat => {
       const planeNum = sat.plane;
       const isVisible = !isSatHidden(sat.id);
       const isOffline = offlineSet.has(sat.id);
@@ -493,16 +495,28 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
         }
 
         if (settings.satGlow) {
-          const hexStr = isOffline ? settings.offlineSatColor : isHighLatency ? settings.highLatencySatColor : settings.satColor;
+          const isCritical = criticalSatellites.includes(sat.id);
+          const hexStr = isCritical ? '#ff0000' : isOffline ? '#888888' : isHighLatency ? settings.highLatencySatColor : settings.satColor;
+          
+          // Make offline satellites blink
+          let opacity = isFocused ? 0.4 : 0.85;
+          if (isOffline) {
+              opacity = (Math.sin(currentTime * 0.5) * 0.5 + 0.5) * 0.8;
+          }
+          if (isCritical) {
+              opacity = 1.0;
+          }
+          
           const glowMat = new THREE.SpriteMaterial({
             map: createGlowTextureFromHex(hexStr || '#00f0ff'),
             color: 0xffffff,
             transparent: true,
-            opacity: isFocused ? 0.4 : 0.85,
+            opacity: opacity,
             blending: THREE.AdditiveBlending
           });
           const glowSprite = new THREE.Sprite(glowMat);
-          glowSprite.scale.set(1.1 * settings.satSize, 1.1 * settings.satSize, 1);
+          const scaleFactor = isCritical ? 2.5 : 1.1;
+          glowSprite.scale.set(scaleFactor * settings.satSize, scaleFactor * settings.satSize, 1);
           glowSprite.position.copy(pos);
           satellites.add(glowSprite);
         }
@@ -650,7 +664,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
     const bWgs = 6.371 * (6356.752 / 6378.137); // Polar semi-minor axis
     const e2Wgs = 1.0 - (bWgs * bWgs) / (aWgs * aWgs); // First eccentricity squared
 
-    scenario.gateways.forEach(gw => {
+    (scenario.gateways || []).forEach(gw => {
       const latRad = (gw.lat * Math.PI) / 180;
       const lonRad = (gw.lon * Math.PI) / 180;
       const N = aWgs / Math.sqrt(1.0 - e2Wgs * Math.sin(latRad) * Math.sin(latRad));
