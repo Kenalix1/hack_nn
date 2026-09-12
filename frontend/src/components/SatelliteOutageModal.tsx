@@ -119,7 +119,6 @@ export const SatelliteOutageModal: React.FC<SatelliteOutageModalProps> = ({
         <div><span style={{ color: '#a1a1aa' }}>Координаты (Lat / Lon):</span> <b style={{ color: '#fff' }}>{satellite.sub_lat.toFixed(1)}° / {satellite.sub_lon.toFixed(1)}°</b></div>
         <div><span style={{ color: '#a1a1aa' }}>Доплеровский сдвиг:</span> <b style={{ color: '#38bdf8' }}>{(Math.sin(currentTimeSeconds * 0.05 + satellite.sub_lat) * 14.2).toFixed(1)} кГц</b></div>
         <div><span style={{ color: '#a1a1aa' }}>Запас линии (Link Margin):</span> <b style={{ color: '#34d399' }}>+5.2 dB (SLA PASS)</b></div>
-        <div><span style={{ color: '#a1a1aa' }}>Угол места (Elevation):</span> <b style={{ color: '#fff' }}>{(28.5 + Math.abs(Math.sin(satellite.sub_lat)) * 35).toFixed(1)}°</b></div>
         <div>
           <span style={{ color: '#a1a1aa' }}>Температура ЭВМ:</span>{' '}
           <b style={{ color: (satellite.temperature_c ?? 38) >= 80 ? '#ff3b30' : (satellite.temperature_c ?? 38) >= 60 ? '#ffaa00' : '#00ff88' }}>

@@ -362,6 +362,20 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
         sprite.material.opacity = op;
       });
 
+      // 60 FPS Smooth Position Interpolation for Satellites
+      groupsRef.current.satellites.children.forEach(satGroup => {
+        const uData = (satGroup as any).userData;
+        if (uData && uData.targetPos) {
+          satGroup.position.lerp(uData.targetPos, 0.18);
+          if (Math.abs(satGroup.position.y / (satGroup.position.length() || 1)) > 0.95) {
+            satGroup.up.set(1, 0, 0);
+          } else {
+            satGroup.up.set(0, 1, 0);
+          }
+          satGroup.lookAt(0, 0, 0);
+        }
+      });
+
       // Update 3D Satellite LOD based on map zoom & camera distance
       const currentFocusedId = focusedSatelliteIdRef.current;
       groupsRef.current.satellites.children.forEach(child => {
@@ -609,7 +623,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
         }
         satGroup.lookAt(0, 0, 0);
 
-        satGroup.userData = { satellite: sat };
+        satGroup.userData = { satellite: sat, targetPos: pos.clone(), satId: sat.id };
         satellites.add(satGroup);
 
         // Register both hitMesh and model meshes for click selection
