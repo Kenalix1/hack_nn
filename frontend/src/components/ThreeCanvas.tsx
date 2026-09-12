@@ -10,6 +10,11 @@ import {
   updateSatelliteLOD,
   SatelliteStatus
 } from '../utils/satelliteModelLoader';
+import {
+  loadDishModel,
+  getCachedDishModel,
+  buildDish3DObject
+} from '../utils/dishModelLoader';
 
 interface ThreeCanvasProps {
   scenario: ScenarioData | null;
@@ -56,6 +61,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
   const controlsRef = useRef<OrbitControls | null>(null);
   const satPosMapRef = useRef<Record<string, THREE.Vector3>>({});
   const [modelsLoaded, setModelsLoaded] = useState(false);
+  const [dishLoaded, setDishLoaded] = useState(false);
 
   const focusedSatelliteIdRef = useRef<string | null>(focusedSatelliteId);
   useEffect(() => {
@@ -66,6 +72,10 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
     loadSatelliteModels()
       .then(() => setModelsLoaded(true))
       .catch((e) => console.warn('Could not load 3D satellite models:', e));
+
+    loadDishModel()
+      .then(() => setDishLoaded(true))
+      .catch((e) => console.warn('Could not load Dish_LowPoly model:', e));
   }, []);
 
   useEffect(() => {
@@ -633,12 +643,13 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
       gwPosMap[gw.id] = pos;
 
       if (settings.showGateways) {
-        const gwGeo = new THREE.ConeGeometry(0.24, 0.48, 6);
-        const gwMesh = new THREE.Mesh(gwGeo, greenGroundMat);
-        gwMesh.position.copy(pos);
-        gwMesh.lookAt(0, 0, 0);
-        gwMesh.rotateX(Math.PI / 2);
-        gateways.add(gwMesh);
+        const dishTemplate = getCachedDishModel();
+        const dishObj = buildDish3DObject(dishTemplate, settings.gatewayColor || '#00d084', settings.satSize);
+        dishObj.position.copy(pos);
+        // Align dish to point radially outward from Earth center into space
+        const normal = pos.clone().normalize();
+        dishObj.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+        gateways.add(dishObj);
       }
 
       if (settings.showLabels) {
@@ -818,7 +829,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
       });
     }
 
-  }, [scenario, settings, currentTime, outages, focusedSatelliteId, modelsLoaded]);
+  }, [scenario, settings, currentTime, outages, focusedSatelliteId, modelsLoaded, dishLoaded]);
 
   return (
     <div

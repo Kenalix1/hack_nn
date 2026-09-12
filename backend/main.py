@@ -412,6 +412,19 @@ def get_gltf_model(filename: str):
         return FileResponse(pub_file, media_type="model/gltf+json")
     raise HTTPException(status_code=404, detail="Model not found")
 
+@app.get("/{filename}.obj")
+def get_obj_model(filename: str):
+    dist_file = BASE_DIR / "frontend" / "dist" / f"{filename}.obj"
+    if dist_file.exists():
+        return FileResponse(dist_file, media_type="text/plain")
+    root_file = BASE_DIR / f"{filename}.obj"
+    if root_file.exists():
+        return FileResponse(root_file, media_type="text/plain")
+    pub_file = BASE_DIR / "frontend" / "public" / f"{filename}.obj"
+    if pub_file.exists():
+        return FileResponse(pub_file, media_type="text/plain")
+    raise HTTPException(status_code=404, detail="Model not found")
+
 @app.get("/", response_class=HTMLResponse)
 def index_page():
     dist_index = BASE_DIR / "frontend" / "dist" / "index.html"
