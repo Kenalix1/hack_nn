@@ -170,7 +170,7 @@ def analyze_combinations(base_scenario: Dict[str, Any], settings: Dict[str, Any]
             "overall_availability": res["overall_availability"],
             "all_targets_met": res["all_targets_met"],
             "total_annual_cost_usd": total_cost,
-            "simulation_result": res,
+            "simulation_result": {k: v for k, v in res.items() if k != "routes_by_time"},
             "raw_scenario": sc
         }
     

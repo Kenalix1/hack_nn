@@ -149,7 +149,8 @@ def run_simulation(scenario: dict, settings: dict = None) -> dict:
         client_step_data = res['client_step_data']
         step_routes = res['step_routes']
         
-        snapshots.append(snap)
+        if not snapshots:
+            snapshots.append(snap)
         routes_by_time.append({
             't_s': t_s,
             'routes': step_routes

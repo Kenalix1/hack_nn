@@ -100,9 +100,7 @@ export const App: React.FC = () => {
     initialSaved?.currentRawScenario || null
   );
   const [isSimulating, setIsSimulating] = useState<boolean>(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(
-    initialSaved?.isSidebarOpen ?? true
-  );
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
   const [currentTimeSeconds, setCurrentTimeSeconds] = useState<number>(
     initialSaved?.currentTimeSeconds || 0
   );

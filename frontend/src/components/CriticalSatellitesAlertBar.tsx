@@ -14,7 +14,7 @@ export const CriticalSatellitesAlertBar: React.FC<CriticalSatellitesAlertBarProp
   currentTimeSeconds = 0,
   onSelectSatellite
 }) => {
-  const [isExpanded, setIsExpanded] = useState<boolean>(true);
+  const [isExpanded, setIsExpanded] = useState<boolean>(false);
 
   if (!scenario || !scenario.satellites) return null;
 
