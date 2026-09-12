@@ -115,15 +115,15 @@ export const App: React.FC = () => {
       hiddenPlanes: saved.hiddenPlanes || {},
       hiddenSatellites: saved.hiddenSatellites || {},
       hiddenGateways: saved.hiddenGateways || {},
-      satColor: saved.satColor || '#00f0ff',
-      offlineSatColor: saved.offlineSatColor || '#ff3b30',
-      highLatencySatColor: saved.highLatencySatColor || '#ff9900',
-      orbitColor: saved.orbitColor || '#1473e6',
-      islColor: saved.islColor || '#00ff88',
-      gatewayColor: saved.gatewayColor || '#00d084',
-      groundLinkColor: saved.groundLinkColor || '#f59e0b',
-      atmosphereColor: saved.atmosphereColor || '#1e3a8a',
-      fovConeColor: saved.fovConeColor || '#00f0ff'
+      satColor: saved.satColor || '#ffffff',
+      offlineSatColor: saved.offlineSatColor || '#e11d48',
+      highLatencySatColor: saved.highLatencySatColor || '#d97706',
+      orbitColor: saved.orbitColor || '#475569',
+      islColor: saved.islColor || '#cbd5e1',
+      gatewayColor: saved.gatewayColor || '#f8fafc',
+      groundLinkColor: saved.groundLinkColor || '#94a3b8',
+      atmosphereColor: saved.atmosphereColor || '#334155',
+      fovConeColor: saved.fovConeColor || '#cbd5e1'
     };
   });
 
