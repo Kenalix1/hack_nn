@@ -249,7 +249,6 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
     const fallbackCanvas = createEarth2026FallbackCanvas();
     const fallbackTex = new THREE.CanvasTexture(fallbackCanvas);
     fallbackTex.wrapS = THREE.RepeatWrapping;
-    fallbackTex.repeat.x = -1;
 
     const earthMat = new THREE.MeshPhongMaterial({
       map: fallbackTex,
@@ -263,7 +262,6 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
       'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_atmos_2048.jpg',
       (texture) => {
         texture.wrapS = THREE.RepeatWrapping;
-        texture.repeat.x = -1;
         earthMat.map = texture;
         earthMat.needsUpdate = true;
       },
@@ -273,7 +271,6 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
           'https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg',
           (backupTex) => {
             backupTex.wrapS = THREE.RepeatWrapping;
-            backupTex.repeat.x = -1;
             earthMat.map = backupTex;
             earthMat.needsUpdate = true;
           },
@@ -283,7 +280,6 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
               'https://unpkg.com/three-globe/example/img/earth-day.jpg',
               (dayTex) => {
                 dayTex.wrapS = THREE.RepeatWrapping;
-                dayTex.repeat.x = -1;
                 earthMat.map = dayTex;
                 earthMat.needsUpdate = true;
               }
@@ -295,7 +291,6 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
 
     textureLoader.load('https://unpkg.com/three-globe/example/img/earth-topology.png', (bumpTex) => {
       bumpTex.wrapS = THREE.RepeatWrapping;
-      bumpTex.repeat.x = -1;
       earthMat.bumpMap = bumpTex;
       earthMat.bumpScale = 0.05;
       earthMat.needsUpdate = true;
@@ -307,9 +302,9 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
     const atmosGeo = new THREE.SphereGeometry(earthRadius * 1.025, 48, 48);
     atmosGeo.scale(1.0, 6356.752 / 6378.137, 1.0);
     const atmosMat = new THREE.MeshBasicMaterial({
-      color: 0x1473e6,
+      color: 0x334155,
       transparent: true,
-      opacity: 0.22,
+      opacity: 0.15,
       side: THREE.BackSide
     });
     const atmosMesh = new THREE.Mesh(atmosGeo, atmosMat);
@@ -642,7 +637,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
           }
           
           const glowMat = new THREE.SpriteMaterial({
-            map: createGlowTextureFromHex(hexStr || '#00f0ff'),
+            map: createGlowTextureFromHex(hexStr || '#ffffff'),
             color: 0xffffff,
             transparent: true,
             opacity: opacity,
@@ -659,8 +654,8 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
       if (settings.showLabels && isVisible) {
         const isFocused = sat.id === focusedSatelliteId;
         const labelText = isFocused ? `${sat.id} [Фокус]` : isOffline ? `${sat.id} [ОТКАЗ]` : isHighLatency ? `${sat.id} [! Задержка]` : sat.id;
-        const labelColor = isOffline ? settings.offlineSatColor : isFocused ? '#00f0ff' : isHighLatency ? settings.highLatencySatColor : settings.satColor;
-        const labelSprite = createTextLabelSprite(labelText, '#ffffff', labelColor || '#00f0ff');
+        const labelColor = isOffline ? settings.offlineSatColor : isFocused ? '#ffffff' : isHighLatency ? settings.highLatencySatColor : settings.satColor;
+        const labelSprite = createTextLabelSprite(labelText, '#ffffff', labelColor || '#ffffff');
         const satNormal = pos.clone().normalize();
         labelSprite.position.copy(pos).addScaledVector(satNormal, 0.38 * settings.satSize);
         labels.add(labelSprite);
@@ -775,7 +770,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
 
         const orbitGeo = new THREE.BufferGeometry().setFromPoints(ringPoints);
         const orbitMat = new THREE.LineBasicMaterial({
-          color: settings.orbitColor || '#1473e6',
+          color: settings.orbitColor || '#475569',
           transparent: true,
           opacity: settings.orbitOpacity
         });
@@ -1004,7 +999,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
             const isHighLatencyHop = itemA.isHighLatency || targetHighLatency;
             const isTrafficMode = !!settings.showTrafficLoad;
             const simLoadPct = Math.min(99, Math.max(15, Math.round(42 + Math.cos(currentTime * 0.06 + i * 2.1) * 38 + (isHighLatencyHop ? 30 : 0))));
-            const trafficColor = isBroken ? settings.offlineSatColor : isTrafficMode ? (simLoadPct > 80 ? '#ef4444' : simLoadPct > 55 ? '#f59e0b' : '#38bdf8') : isHighLatencyHop ? settings.highLatencySatColor : (settings.islColor || '#1473e6');
+            const trafficColor = isBroken ? settings.offlineSatColor : isTrafficMode ? (simLoadPct > 80 ? '#ef4444' : simLoadPct > 55 ? '#f59e0b' : '#38bdf8') : isHighLatencyHop ? settings.highLatencySatColor : (settings.islColor || '#cbd5e1');
 
             const arcPts = createCurvedArcPoints(itemA.pos, closestPos, 16);
             const lineGeo = new THREE.BufferGeometry().setFromPoints(arcPts);
@@ -1268,11 +1263,11 @@ function createDistanceLabelSprite(text: string, isHighlight: boolean = false): 
   }
   ctx.fill();
 
-  ctx.strokeStyle = isHighlight ? '#ffffff' : '#1473e6';
+  ctx.strokeStyle = isHighlight ? '#ffffff' : '#475569';
   ctx.lineWidth = 2.5;
   ctx.stroke();
 
-  ctx.fillStyle = isHighlight ? '#000000' : '#00f0ff';
+  ctx.fillStyle = isHighlight ? '#000000' : '#ffffff';
   ctx.font = '500 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';

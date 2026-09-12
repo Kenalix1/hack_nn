@@ -57,15 +57,15 @@ export const GlobalSettingsMenu: React.FC<GlobalSettingsMenuProps> = ({
   const handleResetColors = () => {
     onChangeSettings({
       ...settings,
-      satColor: '#00f0ff',
-      offlineSatColor: '#ff3b30',
-      highLatencySatColor: '#ff9900',
-      orbitColor: '#1473e6',
-      islColor: '#00ff88',
-      gatewayColor: '#00d084',
-      groundLinkColor: '#f59e0b',
-      atmosphereColor: '#1e3a8a',
-      fovConeColor: '#00f0ff'
+      satColor: '#ffffff',
+      offlineSatColor: '#e11d48',
+      highLatencySatColor: '#d97706',
+      orbitColor: '#475569',
+      islColor: '#cbd5e1',
+      gatewayColor: '#f8fafc',
+      groundLinkColor: '#94a3b8',
+      atmosphereColor: '#334155',
+      fovConeColor: '#cbd5e1'
     });
   };
 
