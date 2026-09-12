@@ -1,0 +1,641 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { ScenarioData, SatelliteOutage, OutlinerSettings } from '../types';
+import { getDynamicSatelliteTelemetry } from '../utils/telemetry';
+import { Layers, Eye, EyeOff, ZoomIn, ZoomOut, RotateCcw, Globe, Map } from 'lucide-react';
+
+interface TwoDMapCanvasProps {
+  scenario: ScenarioData | null;
+  settings: OutlinerSettings;
+  currentTime: number;
+  outages?: SatelliteOutage[];
+  onSelectSatellite?: (satId: string) => void;
+}
+
+export const TwoDMapCanvas: React.FC<TwoDMapCanvasProps> = ({
+  scenario,
+  settings,
+  currentTime,
+  outages = [],
+  onSelectSatellite
+}) => {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Map Tile Style: Black & White Dark / Black & White Light / Standard
+  const [tileStyle, setTileStyle] = useState<'bw_dark' | 'bw_light' | 'standard'>('bw_dark');
+
+  // Layers Visibility State
+  const [showISL, setShowISL] = useState<boolean>(true);
+  const [showFOVs, setShowFOVs] = useState<boolean>(true);
+  const [showTracks, setShowTracks] = useState<boolean>(true);
+  const [showGateways, setShowGateways] = useState<boolean>(true);
+
+  // Viewport State: Center Lat/Lon & Zoom Level
+  const [center, setCenter] = useState<{ lat: number; lon: number }>({ lat: 60.0, lon: 60.0 });
+  const [zoom, setZoom] = useState<number>(3); // Zoom 1..10
+
+  // Drag State
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [dragStart, setDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // Selected Node Hover / Click
+  const [selectedNode, setSelectedNode] = useState<{
+    id: string;
+    type: 'satellite' | 'gateway';
+    lat: number;
+    lon: number;
+    plane?: number;
+    status?: string;
+    details?: any;
+  } | null>(null);
+
+  const offlineSet = new Set(outages.map(o => o.satellite_id));
+  const tileCacheRef = useRef<Record<string, HTMLImageElement>>({});
+
+  // Web Mercator Projections (EPSG:3857)
+  const lonToX = useCallback((lon: number, z: number) => {
+    return ((lon + 180) / 360) * Math.pow(2, z) * 256;
+  }, []);
+
+  const latToY = useCallback((lat: number, z: number) => {
+    const latRad = (Math.max(-85.05112878, Math.min(85.05112878, lat)) * Math.PI) / 180;
+    return (
+      (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * Math.pow(2, z) * 256
+    );
+  }, []);
+
+  const xToLon = useCallback((x: number, z: number) => {
+    return (x / (Math.pow(2, z) * 256)) * 360 - 180;
+  }, []);
+
+  const yToLat = useCallback((y: number, z: number) => {
+    const n = Math.PI - (2 * Math.PI * y) / (Math.pow(2, z) * 256);
+    return (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+  }, []);
+
+  // Calculate dynamic satellite sub-point Lat/Lon
+  const computeSubPoint = (sat: any, t_s: number) => {
+    const planeNum = sat.plane || 1;
+    const baseRaanDeg = sat.raan ?? (planeNum - 1) * 90;
+    const basePhaseDeg = (sat as any).phase ?? (planeNum - 1) * 15;
+
+    let slotDeg = 0;
+    if (typeof (sat as any).slot_deg === 'number') slotDeg = (sat as any).slot_deg;
+    else if (typeof sat.true_anomaly === 'number' && sat.true_anomaly !== 0) slotDeg = sat.true_anomaly;
+    else if (typeof sat.idx === 'number') slotDeg = sat.idx >= 15 ? sat.idx : sat.idx * 45;
+
+    const raanOffsetDeg = settings?.planeRaanMap?.[planeNum] ?? 0;
+    const phaseOffsetDeg = settings?.planePhaseMap?.[planeNum] ?? 0;
+
+    const totalRaanRad = ((baseRaanDeg + raanOffsetDeg) % 360) * (Math.PI / 180);
+    const totalPhaseRad = ((basePhaseDeg + phaseOffsetDeg) % 360) * (Math.PI / 180);
+
+    const MU = 398600.4418;
+    const orbRadiusKm = (sat.altitude || 550) + 6371;
+    const n = Math.sqrt(MU / Math.pow(orbRadiusKm, 3));
+    const slotRad = slotDeg * (Math.PI / 180);
+    const u = slotRad + totalPhaseRad + n * t_s;
+    const incRad = (sat.inc || 53.0) * (Math.PI / 180);
+
+    const xEci = Math.cos(totalRaanRad) * Math.cos(u) - Math.sin(totalRaanRad) * Math.sin(u) * Math.cos(incRad);
+    const zEci = Math.sin(totalRaanRad) * Math.cos(u) + Math.cos(totalRaanRad) * Math.sin(u) * Math.cos(incRad);
+    const yEci = Math.sin(u) * Math.sin(incRad);
+
+    const latRad = Math.asin(Math.max(-1, Math.min(1, yEci)));
+    const latDeg = (latRad * 180) / Math.PI;
+
+    const eciLonRad = Math.atan2(zEci, xEci);
+    const omegaE = 7.2921159e-5;
+    const gmstDeg = (omegaE * t_s * 180) / Math.PI;
+    
+    // Align with 3D Globe earthAngle0 (12 deg static offset)
+    const earthAngle0Deg = 12.0;
+    let lonDeg = (eciLonRad * 180) / Math.PI - earthAngle0Deg - gmstDeg;
+    lonDeg = ((lonDeg % 360) + 540) % 360 - 180;
+
+    return { lat: latDeg, lon: lonDeg };
+  };
+
+  // Canvas render loop
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
+
+    canvas.width = container.clientWidth || 1000;
+    canvas.height = container.clientHeight || 700;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const width = canvas.width;
+    const height = canvas.height;
+
+    const currentZoom = Math.floor(zoom);
+    const scale = Math.pow(2, zoom - currentZoom);
+
+    // Center pixel coords in Web Mercator
+    const centerX = lonToX(center.lon, currentZoom);
+    const centerY = latToY(center.lat, currentZoom);
+
+    const toScreenX = (lon: number) => {
+      const px = lonToX(lon, currentZoom);
+      return width / 2 + (px - centerX) * scale;
+    };
+
+    const toScreenY = (lat: number) => {
+      const py = latToY(lat, currentZoom);
+      return height / 2 + (py - centerY) * scale;
+    };
+
+    // 1. Draw Clean Vector Base Map (Continents & Graticule Grid)
+    ctx.fillStyle = tileStyle !== 'standard' ? '#0b0f19' : '#f3f4f6';
+    ctx.fillRect(0, 0, width, height);
+
+    // Render Grid Lines (Parallels & Meridians)
+    ctx.strokeStyle = tileStyle !== 'standard' ? '#1e293b' : '#cbd5e1';
+    ctx.lineWidth = 1;
+
+    for (let lon = -180; lon <= 180; lon += 30) {
+      const sx = toScreenX(lon);
+      ctx.beginPath();
+      ctx.moveTo(sx, 0);
+      ctx.lineTo(sx, height);
+      ctx.stroke();
+
+      ctx.fillStyle = tileStyle !== 'standard' ? '#475569' : '#64748b';
+      ctx.font = '10px monospace';
+      ctx.fillText(`${lon}°`, sx + 3, height - 6);
+    }
+
+    for (let lat = -60; lat <= 80; lat += 20) {
+      const sy = toScreenY(lat);
+      ctx.beginPath();
+      ctx.moveTo(0, sy);
+      ctx.lineTo(width, sy);
+      ctx.stroke();
+
+      ctx.fillStyle = tileStyle !== 'standard' ? '#475569' : '#64748b';
+      ctx.font = '10px monospace';
+      ctx.fillText(`${lat}°`, 6, sy - 3);
+    }
+
+    // Highlight Arctic Zone & Russia Service Region
+    const rfTopY = toScreenY(85);
+    const rfBotY = toScreenY(45);
+    const rfLeftX = toScreenX(20);
+    const rfRightX = toScreenX(180);
+    ctx.fillStyle = tileStyle !== 'standard' ? '#0284c718' : '#0284c710';
+    ctx.fillRect(rfLeftX, rfTopY, rfRightX - rfLeftX, rfBotY - rfTopY);
+    ctx.strokeStyle = '#0284c750';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(rfLeftX, rfTopY, rfRightX - rfLeftX, rfBotY - rfTopY);
+
+    ctx.fillStyle = '#0284c7';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillText('ЗОНА ОБСЛУЖИВАНИЯ РФ И СМП (60°N - 90°N)', rfLeftX + 10, rfTopY + 16);
+
+    // 2. Fetch & Render OpenStreetMap Tiles (Subdomains a/b/c)
+    const startTileX = Math.floor((centerX - width / (2 * scale)) / 256);
+    const endTileX = Math.floor((centerX + width / (2 * scale)) / 256);
+    const startTileY = Math.floor((centerY - height / (2 * scale)) / 256);
+    const endTileY = Math.floor((centerY + height / (2 * scale)) / 256);
+
+    const maxTile = Math.pow(2, currentZoom);
+
+    // Set monochrome black & white filter for map tiles
+    if (tileStyle === 'bw_dark') {
+      ctx.filter = 'grayscale(100%) invert(92%) contrast(140%)';
+    } else if (tileStyle === 'bw_light') {
+      ctx.filter = 'grayscale(100%) contrast(120%)';
+    } else {
+      ctx.filter = 'none';
+    }
+
+    for (let tx = startTileX; tx <= endTileX; tx++) {
+      for (let ty = startTileY; ty <= endTileY; ty++) {
+        if (ty < 0 || ty >= maxTile) continue;
+        const normalizedTx = ((tx % maxTile) + maxTile) % maxTile;
+        const sub = ['a', 'b', 'c'][Math.abs(tx + ty) % 3];
+
+        const tileUrl = `https://${sub}.tile.openstreetmap.org/${currentZoom}/${normalizedTx}/${ty}.png`;
+
+        const tilePx = tx * 256;
+        const tilePy = ty * 256;
+
+        const screenX = width / 2 + (tilePx - centerX) * scale;
+        const screenY = height / 2 + (tilePy - centerY) * scale;
+        const tileSize = 256 * scale;
+
+        let img = tileCacheRef.current[tileUrl];
+        if (!img) {
+          img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.src = tileUrl;
+          img.onload = () => {
+            if (canvasRef.current) {
+              const currentCtx = canvasRef.current.getContext('2d');
+              if (currentCtx) {
+                currentCtx.filter = tileStyle === 'bw_dark'
+                  ? 'grayscale(100%) invert(92%) contrast(140%)'
+                  : tileStyle === 'bw_light'
+                  ? 'grayscale(100%) contrast(120%)'
+                  : 'none';
+                currentCtx.drawImage(img!, screenX, screenY, tileSize, tileSize);
+                currentCtx.filter = 'none';
+              }
+            }
+          };
+          tileCacheRef.current[tileUrl] = img;
+        } else if (img.complete && img.naturalWidth > 0) {
+          ctx.drawImage(img, screenX, screenY, tileSize, tileSize);
+        }
+      }
+    }
+
+    // Reset filter for clear overlay rendering of satellites, tracks, and ISL lines
+    ctx.filter = 'none';
+
+    // Calculate dynamic satellite sub-points
+    const satList = (scenario?.satellites || []).map(sat => {
+      const { lat, lon } = computeSubPoint(sat, currentTime);
+      const isOffline = offlineSet.has(sat.id);
+      const telemetry = getDynamicSatelliteTelemetry(sat, currentTime);
+      return {
+        ...sat,
+        lat,
+        lon,
+        isOffline,
+        telemetry,
+        screenX: toScreenX(lon),
+        screenY: toScreenY(lat)
+      };
+    });
+
+    // 3. Draw Orbit Ground Tracks
+    if (showTracks && scenario?.satellites) {
+      ctx.strokeStyle = tileStyle !== 'standard' ? '#38bdf860' : '#2563eb60';
+      ctx.lineWidth = 1.5;
+
+      const planes: Record<number, any[]> = {};
+      scenario.satellites.forEach(s => {
+        const p = s.plane || 1;
+        if (!planes[p]) planes[p] = [];
+        planes[p].push(s);
+      });
+
+      Object.values(planes).forEach(planeSats => {
+        if (planeSats.length === 0) return;
+        ctx.beginPath();
+        const sampleSat = planeSats[0];
+
+        let prevX = 0;
+        let first = true;
+        for (let step = 0; step <= 80; step++) {
+          const tSample = currentTime + (step / 80) * 5700;
+          const pt = computeSubPoint(sampleSat, tSample);
+          const sx = toScreenX(pt.lon);
+          const sy = toScreenY(pt.lat);
+
+          if (!first && Math.abs(sx - prevX) > width * 0.5) {
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(sx, sy);
+          } else if (first) {
+            ctx.moveTo(sx, sy);
+            first = false;
+          } else {
+            ctx.lineTo(sx, sy);
+          }
+          prevX = sx;
+        }
+        ctx.stroke();
+      });
+    }
+
+    // 4. Draw FOV Coverage Footprints
+    if (showFOVs) {
+      satList.forEach(sat => {
+        if (sat.isOffline) return;
+        const radiusPx = 28 * Math.min(2.5, zoom / 3);
+        ctx.fillStyle = tileStyle !== 'standard' ? '#1473e618' : '#3b82f620';
+        ctx.strokeStyle = tileStyle !== 'standard' ? '#1473e640' : '#2563eb50';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(sat.screenX, sat.screenY, radiusPx, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      });
+    }
+
+    // 5. Draw ISL Lines
+    if (showISL) {
+      ctx.lineWidth = 1.5;
+      for (let i = 0; i < satList.length; i++) {
+        for (let j = i + 1; j < satList.length; j++) {
+          const s1 = satList[i];
+          const s2 = satList[j];
+
+          const isSamePlane = s1.plane === s2.plane && Math.abs(s1.idx - s2.idx) === 1;
+          const isInterPlane = Math.abs(s1.plane - s2.plane) === 1 && s1.idx === s2.idx;
+
+          if (isSamePlane || isInterPlane) {
+            const isAnyOffline = s1.isOffline || s2.isOffline;
+            ctx.strokeStyle = isAnyOffline ? '#ff3b3060' : '#00ff8870';
+
+            if (Math.abs(s1.screenX - s2.screenX) < width * 0.5) {
+              ctx.beginPath();
+              ctx.moveTo(s1.screenX, s1.screenY);
+              ctx.lineTo(s2.screenX, s2.screenY);
+              ctx.stroke();
+            }
+          }
+        }
+      }
+    }
+
+    // 6. Draw Gateways & Ground Stations
+    if (showGateways) {
+      const gws = scenario?.gateways || [
+        { id: 'C65', name: 'Москва C65', lat: 55.75, lon: 37.61 },
+        { id: 'Pechora', name: 'Печора НСП', lat: 65.14, lon: 57.22 },
+        { id: 'Murmansk', name: 'Мурманск Терминал', lat: 68.97, lon: 33.08 },
+        { id: 'Novosibirsk', name: 'Новосибирск Хаб', lat: 55.03, lon: 82.93 },
+        { id: 'Vladivostok', name: 'Владивосток', lat: 43.11, lon: 131.88 }
+      ];
+
+      gws.forEach(gw => {
+        const gx = toScreenX(gw.lon);
+        const gy = toScreenY(gw.lat);
+
+        ctx.fillStyle = '#fbbf24';
+        ctx.beginPath();
+        ctx.arc(gx, gy, 6, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.fillStyle = tileStyle !== 'standard' ? '#ffffff' : '#0f172a';
+        ctx.font = 'bold 11px monospace';
+        ctx.fillText(gw.name || gw.id, gx + 9, gy + 4);
+      });
+    }
+
+    // 7. Draw Satellites
+    satList.forEach(sat => {
+      const color = sat.isOffline
+        ? '#ff3b30'
+        : sat.telemetry.overheated
+        ? '#fbbf24'
+        : '#00ff88';
+
+      // Sat halo
+      ctx.fillStyle = color + '40';
+      ctx.beginPath();
+      ctx.arc(sat.screenX, sat.screenY, 9, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Sat core
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(sat.screenX, sat.screenY, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = sat.isOffline ? '#ff7777' : tileStyle !== 'standard' ? '#e2e8f0' : '#1e293b';
+      ctx.font = 'bold 10px monospace';
+      ctx.fillText(sat.id, sat.screenX + 7, sat.screenY - 3);
+    });
+
+  }, [scenario, outages, currentTime, settings, tileStyle, showISL, showFOVs, showTracks, showGateways, center, zoom, lonToX, latToY]);
+
+  // Click handler
+  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas || !scenario) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+
+    const currentZoom = Math.floor(zoom);
+    const scale = Math.pow(2, zoom - currentZoom);
+    const centerX = lonToX(center.lon, currentZoom);
+    const centerY = latToY(center.lat, currentZoom);
+
+    // Satellites
+    for (const sat of scenario.satellites) {
+      const pt = computeSubPoint(sat, currentTime);
+      const px = lonToX(pt.lon, currentZoom);
+      const py = latToY(pt.lat, currentZoom);
+      const sx = canvas.width / 2 + (px - centerX) * scale;
+      const sy = canvas.height / 2 + (py - centerY) * scale;
+
+      if (Math.hypot(clickX - sx, clickY - sy) <= 14) {
+        const isOffline = offlineSet.has(sat.id);
+        const telemetry = getDynamicSatelliteTelemetry(sat, currentTime);
+        setSelectedNode({
+          id: sat.id,
+          type: 'satellite',
+          lat: pt.lat,
+          lon: pt.lon,
+          plane: sat.plane,
+          status: isOffline ? 'ОТКАЗ (OFFLINE)' : 'ШТАТНО (ACTIVE)',
+          details: telemetry
+        });
+        if (onSelectSatellite) onSelectSatellite(sat.id);
+        return;
+      }
+    }
+
+    setSelectedNode(null);
+  };
+
+  // Drag Panning Handlers
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsDragging(true);
+    setDragStart({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return;
+    const dx = e.clientX - dragStart.x;
+    const dy = e.clientY - dragStart.y;
+    setDragStart({ x: e.clientX, y: e.clientY });
+
+    const currentZoom = Math.floor(zoom);
+    const scale = Math.pow(2, zoom - currentZoom);
+
+    const dLon = (dx / scale) * (360 / (Math.pow(2, currentZoom) * 256));
+    const dLat = (dy / scale) * (180 / (Math.pow(2, currentZoom) * 256));
+
+    setCenter(prev => ({
+      lat: Math.max(-80, Math.min(80, prev.lat + dLat)),
+      lon: ((prev.lon - dLon + 540) % 360) - 180
+    }));
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    const delta = e.deltaY < 0 ? 0.25 : -0.25;
+    setZoom(z => Math.max(2.0, Math.min(8.0, Number((z + delta).toFixed(2)))));
+  };
+
+  const handleMouseUp = () => setIsDragging(false);
+
+  return (
+    <div ref={containerRef} style={{
+      width: '100%',
+      height: '100%',
+      backgroundColor: tileStyle !== 'standard' ? '#0b0f19' : '#e5e7eb',
+      position: 'relative',
+      overflow: 'hidden',
+      userSelect: 'none'
+    }}>
+      {/* OSM Control Bar */}
+      <div style={{
+        position: 'absolute',
+        top: '16px',
+        left: '16px',
+        zIndex: 90,
+        backgroundColor: '#121722dd',
+        border: '1px solid #1e293b',
+        borderRadius: '8px',
+        padding: '8px 12px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px',
+        boxShadow: '0 6px 20px rgba(0,0,0,0.5)',
+        backdropFilter: 'blur(8px)',
+        fontSize: '12px',
+        color: '#f8fafc'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: '#38bdf8' }}>
+          <Map size={16} />
+          <span>OpenStreetMap 2D (Без Флагов)</span>
+        </div>
+
+        <div style={{ width: '1px', height: '18px', backgroundColor: '#333943' }} />
+
+        {/* Tile Style Selector */}
+        <button
+          onClick={() => setTileStyle(s => s === 'bw_dark' ? 'bw_light' : s === 'bw_light' ? 'standard' : 'bw_dark')}
+          style={ctrlBtnStyle(true)}
+          title="Переключить стилевой режим подложки карты"
+        >
+          <Globe size={13} />
+          <span>{tileStyle === 'bw_dark' ? 'Ч/Б Тёмный' : tileStyle === 'bw_light' ? 'Ч/Б Светлый' : 'Цветной OSM'}</span>
+        </button>
+
+        {/* Layer Toggles */}
+        <button onClick={() => setShowISL(!showISL)} style={ctrlBtnStyle(showISL)} title="Переключить линии связи ISL">
+          {showISL ? <Eye size={13} /> : <EyeOff size={13} />}
+          <span>ISL</span>
+        </button>
+
+        <button onClick={() => setShowFOVs(!showFOVs)} style={ctrlBtnStyle(showFOVs)} title="Переключить пятна зоны покрытия">
+          {showFOVs ? <Eye size={13} /> : <EyeOff size={13} />}
+          <span>FOV</span>
+        </button>
+
+        <button onClick={() => setShowTracks(!showTracks)} style={ctrlBtnStyle(showTracks)} title="Переключить трассы орбит">
+          {showTracks ? <Eye size={13} /> : <EyeOff size={13} />}
+          <span>Трассы</span>
+        </button>
+
+        <button onClick={() => setShowGateways(!showGateways)} style={ctrlBtnStyle(showGateways)} title="Переключить шлюзы">
+          {showGateways ? <Eye size={13} /> : <EyeOff size={13} />}
+          <span>Шлюзы</span>
+        </button>
+
+        <div style={{ width: '1px', height: '18px', backgroundColor: '#333943' }} />
+
+        {/* Zoom Controls */}
+        <button onClick={() => setZoom(z => Math.min(8.0, z + 0.5))} style={iconBtnStyle} title="Приблизить">
+          <ZoomIn size={14} />
+        </button>
+        <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#00ff88', fontWeight: 'bold' }}>
+          Z={zoom.toFixed(1)}
+        </span>
+        <button onClick={() => setZoom(z => Math.max(2.0, z - 0.5))} style={iconBtnStyle} title="Отдалить (Мин. Z=2.0)">
+          <ZoomOut size={14} />
+        </button>
+        <button onClick={() => { setZoom(2.0); setCenter({ lat: 60, lon: 60 }); }} style={iconBtnStyle} title="Сброс на Z=2.0">
+          <RotateCcw size={13} />
+        </button>
+      </div>
+
+      {/* Main OSM Canvas */}
+      <canvas
+        ref={canvasRef}
+        onClick={handleCanvasClick}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        onWheel={handleWheel}
+        style={{
+          width: '100%',
+          height: '100%',
+          cursor: isDragging ? 'grabbing' : 'grab',
+          display: 'block'
+        }}
+      />
+
+      {/* Telemetry Card Popup */}
+      {selectedNode && (
+        <div style={{
+          position: 'absolute',
+          bottom: '80px',
+          left: '16px',
+          zIndex: 95,
+          backgroundColor: '#121722ee',
+          border: `1px solid ${selectedNode.status?.includes('OFFLINE') ? '#ff3b30' : '#1473e6'}`,
+          borderRadius: '8px',
+          padding: '12px 16px',
+          fontSize: '12px',
+          minWidth: '240px',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+          backdropFilter: 'blur(8px)',
+          color: '#ffffff'
+        }}>
+          <div style={{ fontWeight: 'bold', fontSize: '13px', color: '#00f0ff', marginBottom: '4px' }}>
+            🛰️ Спутник {selectedNode.id}
+          </div>
+          <div style={{ fontSize: '11px', color: '#ccc', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+            <div>Широта: <b>{selectedNode.lat.toFixed(2)}° N</b> | Долгота: <b>{selectedNode.lon.toFixed(2)}° E</b></div>
+            <div>Плоскость: <b style={{ color: '#38bdf8' }}>P{selectedNode.plane}</b></div>
+            <div>Статус: <b style={{ color: selectedNode.status?.includes('OFFLINE') ? '#ff3b30' : '#00ff88' }}>{selectedNode.status}</b></div>
+            {selectedNode.details?.temperature_c && <div>Температура: <b>{selectedNode.details.temperature_c.toFixed(1)}°C</b></div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ctrlBtnStyle = (active: boolean): React.CSSProperties => ({
+  backgroundColor: active ? '#1e293b' : '#121620',
+  color: active ? '#38bdf8' : '#64748b',
+  border: `1px solid ${active ? '#0284c7' : '#333943'}`,
+  borderRadius: '4px',
+  padding: '4px 8px',
+  fontSize: '11px',
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '4px',
+  fontWeight: active ? 600 : 400
+});
+
+const iconBtnStyle: React.CSSProperties = {
+  backgroundColor: '#1e293b',
+  color: '#cbd5e1',
+  border: '1px solid #333943',
+  borderRadius: '4px',
+  padding: '4px 8px',
+  fontSize: '11px',
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center'
+};
