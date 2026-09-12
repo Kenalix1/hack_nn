@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, RotateCcw, Layers, BarChart2, Settings, Copy, PanelRight, ShieldAlert, FileText, Map, Globe, Activity, Lightbulb } from 'lucide-react';
+import { Play, RotateCcw, Layers, BarChart2, Settings, Copy, PanelRight, ShieldAlert, FileText, Map, Globe, Activity, Lightbulb, GitCompare } from 'lucide-react';
 
 interface HeaderProps {
   scenarios: Array<{ id: string; title: string }>;
@@ -424,9 +424,9 @@ export const Header: React.FC<HeaderProps> = ({
           <span>Конфигуратор</span>
         </button>
 
-        <button onClick={() => onOpenWindow('compare')} className="hdr-btn hdr-btn-secondary" title="Анализ комбинаций отказов и вариантов восстановления">
-          <Copy size={14} style={{ color: '#fbbf24' }} />
-          <span>Анализ Отказов</span>
+        <button onClick={() => onOpenWindow('compare')} className="hdr-btn hdr-btn-secondary" title="Сравнение группировок (Проект А vs Проект Б) и анализ отказов">
+          <GitCompare size={14} style={{ color: '#38bdf8' }} />
+          <span>Сравнение Проектов</span>
         </button>
 
         {onOpenPdfReport && (

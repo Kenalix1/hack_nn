@@ -927,16 +927,19 @@ export const App: React.FC = () => {
         {/* Windows: Project Compare / Combination Analysis */}
         <DraggableWindow
           id="compare"
-          title="Анализ Комбинаций Отказов и Сравнение"
+          title="Сравнение Проектов и Аналитика Группировок"
           isOpen={windows.compare?.isOpen}
           onClose={() => closeWindow('compare')}
           zIndex={windows.compare?.zIndex || 12}
           onFocus={() => focusWindow('compare')}
-          initialPos={{ x: 100, y: 100, width: 900, height: 600 }}
+          initialPos={{ x: 80, y: 50, width: 960, height: 640 }}
         >
           <CompareModal 
             onOpenConfigurator={() => openWindow('configurator')}
             baseScenario={currentRawScenario}
+            currentScenarioData={scenarioData}
+            scenariosList={scenarios}
+            onSelectScenario={(id) => setActiveScenarioId(id)}
             onVisualizeScenario={handleVisualizeScenario}
             onClose={() => closeWindow('compare')}
             onSetCriticalSatellites={setCriticalSatellites}

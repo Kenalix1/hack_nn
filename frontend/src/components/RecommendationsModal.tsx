@@ -409,7 +409,7 @@ export const RecommendationsModal: React.FC<RecommendationsModalProps> = ({
                   gap: '6px'
                 }}
               >
-                <span>Анализ Отказов</span>
+                <span>Сравнение Проектов</span>
                 <ArrowRight size={14} />
               </button>
             )}
