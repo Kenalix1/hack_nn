@@ -409,7 +409,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
       const planeNum = sat.plane;
       const isVisible = !isSatHidden(sat.id);
       const isOffline = offlineSet.has(sat.id);
-      const isHighLatency = !isOffline && (highLatencySatSet.has(sat.id) || Math.sin((currentTime * 0.002) + sat.plane) > 0.6);
+      const isHighLatency = !isOffline && highLatencySatSet.has(sat.id);
 
       const altKm = sat.altitude || 550.0;
       const orbRadiusKm = 6371.0 + altKm;
@@ -510,7 +510,8 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
         const labelText = isFocused ? `${sat.id} [Фокус]` : isOffline ? `${sat.id} [ОТКАЗ]` : isHighLatency ? `${sat.id} [! Задержка]` : sat.id;
         const labelColor = isOffline ? settings.offlineSatColor : isFocused ? '#00f0ff' : isHighLatency ? settings.highLatencySatColor : settings.satColor;
         const labelSprite = createTextLabelSprite(labelText, '#ffffff', labelColor || '#00f0ff');
-        labelSprite.position.set(pos.x, pos.y + 0.38, pos.z);
+        const satNormal = pos.clone().normalize();
+        labelSprite.position.copy(pos).addScaledVector(satNormal, 0.38 * settings.satSize);
         labels.add(labelSprite);
       }
 
@@ -672,7 +673,8 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
 
       if (settings.showLabels && settings.showGateways && isGwVisible) {
         const labelSprite = createTextLabelSprite(gw.id, '#ffffff', settings.gatewayColor || '#00d084');
-        labelSprite.position.set(pos.x * 1.05, pos.y * 1.05 + 0.25, pos.z * 1.05);
+        const gwNormal = pos.clone().normalize();
+        labelSprite.position.copy(pos).addScaledVector(gwNormal, 0.35);
         labels.add(labelSprite);
       }
     });
@@ -713,7 +715,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
 
           if (settings.showDistances !== false) {
             const distKm = Math.round(itemA.posKm.distanceTo(itemB.posKm));
-            const midPos = new THREE.Vector3().addVectors(itemA.pos, itemB.pos).multiplyScalar(0.508);
+            const midPos = getArcMidPoint(itemA.pos, itemB.pos, 0.15);
             const isFocused = itemA.sat.id === focusedSatelliteId || itemB.sat.id === focusedSatelliteId;
             const labelStr = isTrafficMode ? `${distKm} км | ${simLoadPct}%` : `${distKm} км`;
             const distSprite = createDistanceLabelSprite(labelStr, isFocused || simLoadPct > 80);
@@ -724,6 +726,8 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
       });
 
       // 2. Inter-plane ISLs (Between adjacent planes)
+      const scenarioIslRangeKm = scenario.raw_scenario?.environment?.isl_range_km ?? 3000.0;
+
       for (let i = 0; i < planeKeys.length; i++) {
         const pCurrent = planeKeys[i];
         const pNext = planeKeys[(i + 1) % planeKeys.length];
@@ -747,17 +751,19 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
           nextItems.forEach(itemB => {
             if (isSatHidden(itemB.sat.id)) return;
 
-            const dist = itemA.pos.distanceTo(itemB.pos);
-            if (dist < closestDist) {
-              closestDist = dist;
-              closestPos = itemB.pos;
-              closestPosKm = itemB.posKm;
-              targetOffline = itemB.isOffline;
-              targetHighLatency = itemB.isHighLatency;
+            const distKm = itemA.posKm.distanceTo(itemB.posKm);
+            if (distKm <= scenarioIslRangeKm && !isLineOccludedByEarthKm(itemA.posKm, itemB.posKm)) {
+              if (distKm < closestDist) {
+                closestDist = distKm;
+                closestPos = itemB.pos;
+                closestPosKm = itemB.posKm;
+                targetOffline = itemB.isOffline;
+                targetHighLatency = itemB.isHighLatency;
+              }
             }
           });
 
-          if (closestPos && closestPosKm && closestDist < 8.5) {
+          if (closestPos && closestPosKm) {
             const isBroken = itemA.isOffline || targetOffline;
             const isHighLatencyHop = itemA.isHighLatency || targetHighLatency;
             const isTrafficMode = !!settings.showTrafficLoad;
@@ -776,7 +782,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
 
             if (settings.showDistances !== false) {
               const distKm = Math.round(itemA.posKm.distanceTo(closestPosKm));
-              const midPos = new THREE.Vector3().addVectors(itemA.pos, closestPos).multiplyScalar(0.508);
+              const midPos = getArcMidPoint(itemA.pos, closestPos, 0.15);
               const isFocused = itemA.sat.id === focusedSatelliteId;
               const labelStr = isTrafficMode ? `${distKm} км | ${simLoadPct}%` : `${distKm} км`;
               const distSprite = createDistanceLabelSprite(labelStr, isFocused || simLoadPct > 80);
@@ -889,67 +895,90 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
   );
 };
 
-function createTextLabelSprite(text: string, textColor: string, bgColor: string): THREE.Sprite {
+function createTextLabelSprite(text: string, _textColor: string, bgColor: string): THREE.Sprite {
   const canvas = document.createElement('canvas');
-  canvas.width = 160;
-  canvas.height = 48;
+  // High-resolution canvas for crisp Retina rendering
+  canvas.width = 384;
+  canvas.height = 96;
   const ctx = canvas.getContext('2d')!;
 
-  ctx.fillStyle = bgColor;
-  ctx.font = 'bold 16px sans-serif';
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
+  // Medium (500) weight: clean, modern, and not excessively bold
+  ctx.font = '500 24px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  
-  // Add a slight text shadow for better readability against the space background
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-  ctx.shadowBlur = 4;
-  ctx.shadowOffsetX = 1;
-  ctx.shadowOffsetY = 1;
 
-  ctx.fillText(text, 80, 24);
+  // Crisp dark outline for high contrast against Earth oceans, continents, and space
+  ctx.strokeStyle = 'rgba(5, 10, 20, 0.88)';
+  ctx.lineWidth = 4.5;
+  ctx.lineJoin = 'round';
+  ctx.strokeText(text, 192, 48);
+
+  ctx.fillStyle = bgColor;
+  ctx.fillText(text, 192, 48);
 
   const texture = new THREE.CanvasTexture(canvas);
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = true;
+
   const spriteMaterial = new THREE.SpriteMaterial({
     map: texture,
     transparent: true,
-    depthTest: false
+    depthTest: true,
+    depthWrite: false
   });
 
   const sprite = new THREE.Sprite(spriteMaterial);
-  sprite.scale.set(1.2, 0.38, 1);
+  sprite.scale.set(1.28, 0.32, 1);
   return sprite;
 }
 
 function createDistanceLabelSprite(text: string, isHighlight: boolean = false): THREE.Sprite {
   const canvas = document.createElement('canvas');
-  canvas.width = 130;
-  canvas.height = 36;
+  // High-resolution canvas (2x)
+  canvas.width = 260;
+  canvas.height = 72;
   const ctx = canvas.getContext('2d')!;
 
-  ctx.fillStyle = isHighlight ? 'rgba(0, 240, 255, 0.95)' : 'rgba(15, 23, 38, 0.85)';
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
+  ctx.fillStyle = isHighlight ? 'rgba(0, 240, 255, 0.95)' : 'rgba(15, 23, 38, 0.88)';
   ctx.beginPath();
-  ctx.roundRect(4, 4, 122, 28, 6);
+  if (typeof ctx.roundRect === 'function') {
+    ctx.roundRect(8, 8, 244, 56, 12);
+  } else {
+    ctx.rect(8, 8, 244, 56);
+  }
   ctx.fill();
 
   ctx.strokeStyle = isHighlight ? '#ffffff' : '#1473e6';
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = 2.5;
   ctx.stroke();
 
   ctx.fillStyle = isHighlight ? '#000000' : '#00f0ff';
-  ctx.font = 'bold 12px sans-serif';
+  ctx.font = '500 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, 65, 18);
+  ctx.fillText(text, 130, 36);
 
   const texture = new THREE.CanvasTexture(canvas);
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = true;
+
   const spriteMaterial = new THREE.SpriteMaterial({
     map: texture,
     transparent: true,
-    depthTest: false
+    depthTest: true,
+    depthWrite: false
   });
 
   const sprite = new THREE.Sprite(spriteMaterial);
-  sprite.scale.set(0.85, 0.24, 1);
+  sprite.scale.set(0.85, 0.235, 1);
   return sprite;
 }
 
@@ -1015,6 +1044,40 @@ function createCurvedArcPoints(posA: THREE.Vector3, posB: THREE.Vector3, numPoin
   }
 
   return points;
+}
+
+function getArcMidPoint(posA: THREE.Vector3, posB: THREE.Vector3, elevationOffset = 0.15): THREE.Vector3 {
+  const dirA = posA.clone().normalize();
+  const dirB = posB.clone().normalize();
+  const angle = dirA.angleTo(dirB);
+
+  if (angle < 0.001) {
+    return new THREE.Vector3().addVectors(posA, posB).multiplyScalar(0.5);
+  }
+
+  const sinAngle = Math.sin(angle);
+  const w = Math.sin(0.5 * angle) / sinAngle;
+  const interpDir = new THREE.Vector3()
+    .addScaledVector(dirA, w)
+    .addScaledVector(dirB, w)
+    .normalize();
+
+  const lenA = posA.length();
+  const lenB = posB.length();
+  const baseLen = (lenA + lenB) * 0.5;
+  const bulge = Math.sin(0.5 * Math.PI) * (angle * 0.3);
+  const pointLen = baseLen + bulge + elevationOffset;
+
+  return interpDir.multiplyScalar(pointLen);
+}
+
+function isLineOccludedByEarthKm(posAKm: THREE.Vector3, posBKm: THREE.Vector3, rEarthKm = 6371.0): boolean {
+  const delta = new THREE.Vector3().subVectors(posBKm, posAKm);
+  const lenSq = delta.lengthSq();
+  if (lenSq < 1e-6) return false;
+  const lam = THREE.MathUtils.clamp(-posAKm.dot(delta) / lenSq, 0, 1);
+  const closest = new THREE.Vector3().copy(posAKm).addScaledVector(delta, lam);
+  return closest.length() <= rEarthKm;
 }
 
 function createEarth2026FallbackCanvas(): HTMLCanvasElement {
