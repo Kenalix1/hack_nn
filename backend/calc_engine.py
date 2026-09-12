@@ -384,10 +384,19 @@ def run_simulation(scenario: dict, settings: dict = None) -> dict:
     }
 
 def export_cosmo_result(scenario: dict, simulation_result: dict) -> dict:
+    # Собираем ID всех клиентских пунктов
+    client_ids = [
+        g['id'] for g in scenario.get('ground_sites', [])
+        if g.get('role') == 'client'
+    ]
+
     routes_list = []
     for step_item in simulation_result['routes_by_time']:
         t_s = step_item['t_s']
-        for client_id, path in step_item['routes'].items():
+        routes_at_step = step_item.get('routes', {})
+        # Для КАЖДОГО клиента — запись, даже если маршрута нет
+        for client_id in client_ids:
+            path = routes_at_step.get(client_id, [])
             routes_list.append({
                 't_s': t_s,
                 'client_id': client_id,

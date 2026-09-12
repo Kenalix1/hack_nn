@@ -71,23 +71,31 @@ def run_single_scenario(scenario_entry, settings):
         "routes": routes
     }
 
+_GLOBAL_POOL = None
+
+def get_pool():
+    global _GLOBAL_POOL
+    if _GLOBAL_POOL is None:
+        _GLOBAL_POOL = ProcessPoolExecutor(max_workers=max(1, os.cpu_count() - 1))
+    return _GLOBAL_POOL
+
 def run_mass_simulation(scenarios, settings, on_progress=None):
     results = []
     total = len(scenarios)
     completed = 0
     
-    with ProcessPoolExecutor(max_workers=os.cpu_count()) as pool:
-        futures = {
-            pool.submit(run_single_scenario, sc, settings): sc
-            for sc in scenarios
-        }
+    pool = get_pool()
+    futures = {
+        pool.submit(run_single_scenario, sc, settings): sc
+        for sc in scenarios
+    }
+    
+    for future in as_completed(futures):
+        result = future.result()
+        results.append(result)
+        completed += 1
         
-        for future in as_completed(futures):
-            result = future.result()
-            results.append(result)
-            completed += 1
+        if on_progress:
+            on_progress(completed, total, result)
             
-            if on_progress:
-                on_progress(completed, total, result)
-                
     return results

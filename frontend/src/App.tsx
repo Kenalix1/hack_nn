@@ -274,20 +274,46 @@ export const App: React.FC = () => {
 
   // Upload Custom Scenario JSON
   const handleUploadScenarioJson = async (scenarioJson: any) => {
-    addLog(`Загрузка базового сценария для Монте-Карло анализа...`, 'info');
+    addLog(`Загрузка пользовательского сценария...`, 'info');
     setCurrentRawScenario(scenarioJson);
     const title = scenarioJson.meta?.title || 'Загруженный Сценарий';
-    
+    const scId = scenarioJson.meta?.id || 'custom_upload';
+
     setScenarios(prev => {
-      const scId = scenarioJson.meta?.id || 'custom_upload';
       if (!prev.some(s => s.id === scId)) {
         return [...prev, { id: scId, title }];
       }
       return prev;
     });
+    setActiveScenarioId(scId);
 
-    openWindow('compare');
-    addLog(`Запущен расчет комбинаций Монте-Карло... Ожидайте результаты в таблице.`, 'success');
+    // Запускаем реальную симуляцию через API
+    setIsSimulating(true);
+    try {
+      const res = await fetch('/api/simulate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scenario: scenarioJson })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setScenarioData(data);
+        if (data.raw_scenario) setCurrentRawScenario(data.raw_scenario);
+        addLog(
+          `Расчёт завершён для "${title}": ${data.satellites?.length || 0} КА, ` +
+          `доступность ${((data.simulation_result?.overall_availability || 0) * 100).toFixed(2)}%`,
+          'success'
+        );
+        openWindow('analytics');
+      } else {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        addLog(`Ошибка симуляции: ${err.detail || 'Неизвестная ошибка'}`, 'error');
+      }
+    } catch (e) {
+      addLog(`Ошибка сети при симуляции: ${String(e)}`, 'error');
+    } finally {
+      setIsSimulating(false);
+    }
   };
 
   const handleVisualizeScenario = (rawScenario: any, simResult: any) => {
@@ -477,15 +503,22 @@ export const App: React.FC = () => {
     }
     
     // Construct the cosmo-A-result-1.0 format
-    const routes_list = [];
+    const routes_list: Array<{t_s: number; client_id: string; path: string[]}> = [];
+    // Собираем ID всех клиентов из сценария
+    const clientIds = (scenarioData.raw_scenario?.ground_sites || [])
+        .filter((g: any) => g.role === 'client')
+        .map((g: any) => g.id);
+
     if (scenarioData.simulation_result.routes_by_time) {
         for (const step_item of scenarioData.simulation_result.routes_by_time) {
             const t_s = step_item.t_s;
-            for (const [client_id, path] of Object.entries(step_item.routes || {})) {
+            const routesAtStep = step_item.routes || {};
+            // Для КАЖДОГО клиента — запись
+            for (const client_id of clientIds) {
                 routes_list.push({
                     t_s: t_s,
                     client_id: client_id,
-                    path: path
+                    path: (routesAtStep[client_id] as string[]) || []
                 });
             }
         }
@@ -661,24 +694,25 @@ export const App: React.FC = () => {
 
   // Run Simulation Button Handler
   const handleRunSimulation = async () => {
-    setIsSimulating(true);
-    addLog(`Запуск полного математического моделирования...`, 'info');
-    try {
-      if (currentRawScenario) {
-        await handleUploadScenarioJson(currentRawScenario);
-      } else {
+    if (currentRawScenario) {
+      await handleUploadScenarioJson(currentRawScenario);
+    } else {
+      setIsSimulating(true);
+      addLog(`Запуск полного математического моделирования...`, 'info');
+      try {
         const res = await fetch(`/api/simulate?scenario_id=${activeScenarioId}`);
         if (res.ok) {
           const data = await res.json();
           setScenarioData(data);
-          addLog(`Моделирование завершено: Общая доступность ${((data.simulation_result?.overall_availability || 0.9998) * 100).toFixed(2)}%`, 'success');
+          if (data.raw_scenario) setCurrentRawScenario(data.raw_scenario);
+          addLog(`Моделирование завершено: Общая доступность ${((data.simulation_result?.overall_availability || 0) * 100).toFixed(2)}%`, 'success');
+          openWindow('analytics');
         }
+      } catch (e) {
+        addLog(`Ошибка при вычислении симуляции`, 'error');
+      } finally {
+        setIsSimulating(false);
       }
-    } catch (e) {
-      addLog(`Ошибка при вычислении симуляции`, 'error');
-    } finally {
-      setIsSimulating(false);
-      openWindow('analytics');
     }
   };
 
