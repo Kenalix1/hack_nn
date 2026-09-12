@@ -12,6 +12,7 @@ import { TimelineBar } from './components/TimelineBar';
 import { CriticalSatellitesAlertBar } from './components/CriticalSatellitesAlertBar';
 import { SatelliteOutageModal } from './components/SatelliteOutageModal';
 import { EmergencyModal } from './components/EmergencyModal';
+import { ScenariosModal } from './components/ScenariosModal';
 import { ScenarioData, OutlinerSettings, LogMessage, Satellite, SatelliteOutage } from './types';
 import { Eye, RotateCcw } from 'lucide-react';
 
@@ -46,19 +47,20 @@ const defaultOutlinerSettings: OutlinerSettings = {
   showLabels: true,
   showAtmosphere: true,
   showCoverageHeatmap: true,
+  showDistances: false,
   satGlow: true,
   satSize: 1.0,
   orbitOpacity: 0.5,
   stepSeconds: 10,
-  satColor: '#00f0ff',
-  offlineSatColor: '#ff3b30',
-  highLatencySatColor: '#ff9900',
-  orbitColor: '#1473e6',
-  islColor: '#00ff88',
-  gatewayColor: '#00d084',
-  groundLinkColor: '#f59e0b',
-  atmosphereColor: '#1e3a8a',
-  fovConeColor: '#00f0ff',
+  satColor: '#ffffff',
+  offlineSatColor: '#ef4444',
+  highLatencySatColor: '#f59e0b',
+  orbitColor: '#64748b',
+  islColor: '#cbd5e1',
+  gatewayColor: '#e2e8f0',
+  groundLinkColor: '#94a3b8',
+  atmosphereColor: '#1e293b',
+  fovConeColor: '#ffffff',
   planeRaanMap: {},
   planePhaseMap: {},
   hiddenPlanes: {},
@@ -66,11 +68,13 @@ const defaultOutlinerSettings: OutlinerSettings = {
   hiddenGateways: {}
 };
 
-const defaultWindows = {
+const defaultWindows: Record<string, { isOpen: boolean; zIndex: number }> = {
   analytics: { isOpen: false, zIndex: 10 },
   configurator: { isOpen: false, zIndex: 11 },
   compare: { isOpen: false, zIndex: 12 },
-  emergency: { isOpen: false, zIndex: 13 }
+  emergency: { isOpen: false, zIndex: 13 },
+  scenarios: { isOpen: false, zIndex: 14 },
+  satellite_detail: { isOpen: false, zIndex: 15 }
 };
 
 export const App: React.FC = () => {
@@ -716,6 +720,11 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleDeleteScenario = (id: string) => {
+    setScenarios(prev => prev.filter(s => s.id !== id));
+    addLog(`Сценарий '${id}' удален из списка`, 'warning');
+  };
+
   const openWindow = (key: string) => {
     const nextZ = topZ + 1;
     setTopZ(nextZ);
@@ -826,14 +835,28 @@ export const App: React.FC = () => {
           onSelectSatellite={handleSelectSatellite}
         />
 
-        <SatelliteOutageModal
-          satellite={selectedSatellite}
-          currentOutages={currentOutages}
-          currentTimeSeconds={currentTimeSeconds}
+        {/* Draggable Satellite Management & Active Route Modal */}
+        <DraggableWindow
+          id="satellite_detail"
+          title={`Управление и Трафик Спутника ${selectedSatellite?.id || ''}`}
+          isOpen={!!selectedSatellite}
           onClose={() => setSelectedSatellite(null)}
-          onApplyOutage={handleApplyOutage}
-          onRestoreSatellite={handleRestoreSatellite}
-        />
+          zIndex={windows.satellite_detail?.zIndex || 15}
+          onFocus={() => focusWindow('satellite_detail')}
+          initialPos={{ x: 120, y: 80, width: 460, height: 490 }}
+        >
+          <SatelliteOutageModal
+            satellite={selectedSatellite}
+            activeRoutePath={
+              scenarioData?.routes_sample?.find(r => selectedSatellite && r.path.includes(selectedSatellite.id))?.path
+            }
+            currentOutages={currentOutages}
+            currentTimeSeconds={currentTimeSeconds}
+            onClose={() => setSelectedSatellite(null)}
+            onApplyOutage={handleApplyOutage}
+            onRestoreSatellite={handleRestoreSatellite}
+          />
+        </DraggableWindow>
 
         <DraggableWindow
           id="analytics"
@@ -889,9 +912,9 @@ export const App: React.FC = () => {
 
         {/* Windows: Emergency Simulation & Economic Recommendations */}
         <EmergencyModal
-          isOpen={windows.emergency.isOpen}
+          isOpen={windows.emergency?.isOpen}
           onClose={() => closeWindow('emergency')}
-          zIndex={windows.emergency.zIndex}
+          zIndex={windows.emergency?.zIndex || 13}
           onFocusWindow={() => focusWindow('emergency')}
           currentOutages={currentOutages}
           outlinerSettings={outlinerSettings}
@@ -900,6 +923,27 @@ export const App: React.FC = () => {
           onUpdateSettings={setOutlinerSettings}
           onAddLog={addLog}
         />
+
+        {/* Windows: Scenarios Manager */}
+        <DraggableWindow
+          id="scenarios"
+          title="Менеджер и Библиотека Сценариев"
+          isOpen={windows.scenarios?.isOpen}
+          onClose={() => closeWindow('scenarios')}
+          zIndex={windows.scenarios?.zIndex || 14}
+          onFocus={() => focusWindow('scenarios')}
+          initialPos={{ x: 120, y: 70, width: 780, height: 520 }}
+        >
+          <ScenariosModal
+            scenarios={scenarios}
+            activeScenarioId={activeScenarioId}
+            onSelectScenario={(id) => setActiveScenarioId(id)}
+            onUploadScenarioJson={handleUploadScenarioJson}
+            onDeleteScenario={handleDeleteScenario}
+            onExportScenarioJson={handleExportScenarioJson}
+            onOpenConfigurator={() => openWindow('configurator')}
+          />
+        </DraggableWindow>
 
         {/* Event Log Panel */}
         <EventLogPanel logs={logs} />

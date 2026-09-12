@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { AlertOctagon, CheckCircle, Power, Clock, X } from 'lucide-react';
+import { AlertOctagon, CheckCircle, Power, Activity } from 'lucide-react';
 import { Satellite, SatelliteOutage } from '../types';
 import { getDynamicSatelliteTelemetry } from '../utils/telemetry';
 
 interface SatelliteOutageModalProps {
   satellite: Satellite | null;
+  activeRoutePath?: string[];
   currentOutages: SatelliteOutage[];
   currentTimeSeconds?: number;
   onClose: () => void;
@@ -14,6 +15,7 @@ interface SatelliteOutageModalProps {
 
 export const SatelliteOutageModal: React.FC<SatelliteOutageModalProps> = ({
   satellite: rawSatellite,
+  activeRoutePath,
   currentOutages,
   currentTimeSeconds = 0,
   onClose,
@@ -30,214 +32,206 @@ export const SatelliteOutageModal: React.FC<SatelliteOutageModalProps> = ({
 
   return (
     <div style={{
-      position: 'fixed',
-      top: '50%',
-      left: '50%',
-      transform: 'translate(-50%, -50%)',
-      width: '440px',
-      backgroundColor: '#222222',
-      border: '1px solid #383838',
-      borderRadius: '8px',
-      boxShadow: '0 12px 36px rgba(0,0,0,0.8)',
-      zIndex: 200,
-      color: '#e0e0e0',
-      overflow: 'hidden',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+      padding: '14px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '14px',
+      fontSize: '12px',
+      color: '#e2e8f0',
+      backgroundColor: '#18181b',
+      height: '100%',
+      overflowY: 'auto'
     }}>
-      {/* Header */}
+      {/* Status Card */}
       <div style={{
-        height: '40px',
-        backgroundColor: '#1a1a1a',
-        borderBottom: '1px solid #383838',
+        padding: '12px',
+        backgroundColor: isOffline ? '#ff3b3015' : '#00ff8815',
+        border: `1px solid ${isOffline ? '#ff3b3050' : '#00ff8850'}`,
+        borderRadius: '6px',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '0 14px',
-        fontWeight: 600
+        justifyContent: 'space-between'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <AlertOctagon size={16} style={{ color: isOffline ? '#ff3b30' : '#1473e6' }} />
-          <span>Управление Спутником {satellite.id}</span>
+        <div>
+          <span style={{ fontSize: '11px', color: '#94a3b8' }}>Текущий статус аппарата:</span>
+          <div style={{ fontSize: '14px', fontWeight: 'bold', color: isOffline ? '#ff3b30' : '#00ff88', marginTop: '2px' }}>
+            {isOffline ? 'ВЫВЕДЕН ИЗ СТРОЯ (ОТКАЗ)' : 'ШТАТНОЕ ФУНКЦИОНИРОВАНИЕ'}
+          </div>
         </div>
-        <button onClick={onClose} style={closeButtonStyle}>
-          <X size={14} />
-        </button>
+        {isOffline ? <AlertOctagon size={24} color="#ff3b30" /> : <CheckCircle size={24} color="#00ff88" />}
       </div>
 
-      {/* Body */}
-      <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '12px' }}>
-        
-        {/* Status Card */}
-        <div style={{
-          padding: '12px',
-          backgroundColor: isOffline ? '#ff3b3015' : '#00ff8815',
-          border: `1px solid ${isOffline ? '#ff3b3050' : '#00ff8850'}`,
-          borderRadius: '6px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between'
-        }}>
-          <div>
-            <span style={{ fontSize: '11px', color: '#aaa' }}>Текущее состояние:</span>
-            <div style={{ fontSize: '14px', fontWeight: 'bold', color: isOffline ? '#ff3b30' : '#00ff88', marginTop: '2px' }}>
-              {isOffline ? 'ВЫВЕДЕН ИЗ СТРОЯ (ОТКАЗ)' : 'ШТАТНОЕ ФУНКЦИОНИРОВАНИЕ'}
-            </div>
-          </div>
-          {isOffline ? <AlertOctagon size={24} color="#ff3b30" /> : <CheckCircle size={24} color="#00ff88" />}
+      {/* Active Route Info */}
+      <div style={{
+        backgroundColor: '#27272a',
+        border: '1px solid #3f3f46',
+        borderRadius: '6px',
+        padding: '10px 12px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '6px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#f8fafc', fontWeight: 600, fontSize: '12px' }}>
+          <Activity size={14} style={{ color: '#34d399' }} />
+          <span>Маршрут передачи трафика:</span>
         </div>
-
-        {/* Info Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', backgroundColor: '#181818', padding: '10px', borderRadius: '4px' }}>
-          <div><span style={{ color: '#888' }}>Идентификатор:</span> <b style={{ color: '#fff' }}>{satellite.id}</b></div>
-          <div><span style={{ color: '#888' }}>Плоскость:</span> <b style={{ color: '#fff' }}>P{satellite.plane}</b></div>
-          <div><span style={{ color: '#888' }}>Высота:</span> <b style={{ color: '#fff' }}>{Math.round(satellite.altitude)} км</b></div>
-          <div><span style={{ color: '#888' }}>Широта:</span> <b style={{ color: '#fff' }}>{satellite.sub_lat.toFixed(1)}°</b></div>
-          <div>
-            <span style={{ color: '#888' }}>Температура бортовой ЭВМ:</span>{' '}
-            <b style={{ color: (satellite.temperature_c ?? 38) >= 80 ? '#ff3b30' : (satellite.temperature_c ?? 38) >= 60 ? '#ffaa00' : '#00ff88' }}>
-              {satellite.temperature_c ?? 38.5}°C {(satellite.temperature_c ?? 38) >= 80 ? '[ПЕРЕГРЕВ]' : ''}
-            </b>
-          </div>
-          <div>
-            <span style={{ color: '#888' }}>Запас топлива (ЭРДУ ксенон):</span>{' '}
-            <b style={{ color: (satellite.fuel_pct ?? 95) < 20 ? '#ff3b30' : '#00f0ff' }}>
-              {satellite.fuel_kg ?? 9.99} кг ({satellite.fuel_pct ?? 99.9}%)
-            </b>
-          </div>
-          <div>
-            <span style={{ color: '#888' }}>Солнечные батареи:</span>{' '}
-            <b style={{ color: '#ffaa00' }}>
-              {satellite.solar_power_w ?? 1850} Вт (Номинал)
-            </b>
-          </div>
-          <div>
-            <span style={{ color: '#888' }}>Заряд аккумуляторов (АКБ):</span>{' '}
-            <b style={{ color: '#00ff88' }}>
-              {satellite.battery_pct ?? 100}%
-            </b>
-          </div>
-        </div>
-
-        {/* Action Controls */}
-        {!isOffline ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <label style={{ color: '#aaa', fontWeight: 500 }}>Задать длительность отказа (сек):</label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
-              {[
-                { label: '5 мин', val: 300 },
-                { label: '30 мин', val: 1800 },
-                { label: '1 час', val: 3600 },
-                { label: '24 часа', val: 86400 }
-              ].map(item => (
-                <button
-                  key={item.val}
-                  onClick={() => setDuration(item.val)}
-                  style={{
-                    padding: '6px 0',
-                    fontSize: '11px',
-                    backgroundColor: duration === item.val ? '#1473e6' : '#2a2a2a',
-                    color: duration === item.val ? '#fff' : '#ccc',
-                    border: '1px solid #444',
-                    borderRadius: '4px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-
-            <button
-              onClick={() => onApplyOutage(satellite.id, duration)}
-              style={{
-                backgroundColor: '#ff3b30',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '4px',
-                padding: '10px',
-                fontWeight: 600,
-                fontSize: '12px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                marginTop: '4px'
-              }}
-            >
-              <Power size={14} />
-              <span>Вывести из строя ({duration >= 3600 ? `${duration/3600} ч` : `${duration/60} мин`})</span>
-            </button>
+        {activeRoutePath && activeRoutePath.length > 0 ? (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            flexWrap: 'wrap',
+            fontFamily: 'monospace',
+            fontSize: '12px',
+            marginTop: '2px'
+          }}>
+            {activeRoutePath.map((node, idx) => (
+              <React.Fragment key={idx}>
+                <span style={{
+                  backgroundColor: node === satellite.id ? '#ffffff' : '#18181b',
+                  color: node === satellite.id ? '#000000' : '#e2e8f0',
+                  border: `1px solid ${node === satellite.id ? '#ffffff' : '#52525b'}`,
+                  borderRadius: '4px',
+                  padding: '2px 7px',
+                  fontWeight: 600
+                }}>
+                  {node}
+                </span>
+                {idx < activeRoutePath.length - 1 && (
+                  <span style={{ color: '#a1a1aa', fontWeight: 'bold' }}>→</span>
+                )}
+              </React.Fragment>
+            ))}
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            
-            {/* Economic Compensation Recommendations */}
-            <div style={{
-              backgroundColor: '#0c2419',
-              border: '1px solid #00ff8880',
-              borderRadius: '6px',
-              padding: '12px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '6px'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontWeight: 'bold', color: '#00ff88' }}>💰 ВАРИАНТ 1: Перенастройка сетки ISL</span>
-                <span style={{ backgroundColor: '#00ff88', color: '#000', fontWeight: 'bold', fontSize: '9px', padding: '1px 5px', borderRadius: '3px' }}>
-                  [САМЫЙ ВЫГОДНЫЙ]
-                </span>
-              </div>
-              <p style={{ fontSize: '11px', color: '#bbb', margin: 0, lineHeight: '1.3' }}>
-                Перенаправление трафика через смежные КА кольца S{(satellite.idx - 1 + 8) % 8 || 8} / S{(satellite.idx + 1) % 8 || 1}.
-                Затраты: <b style={{ color: '#00ff88' }}>$25,000</b> (ксенон). Экономия: <b style={{ color: '#00ff88' }}>$805,000</b>.
-              </p>
-            </div>
+          <span style={{ fontSize: '12px', color: '#a1a1aa', fontStyle: 'italic' }}>
+            Канал свободен (нет активного транзита трафика)
+          </span>
+        )}
+      </div>
 
-            <div style={{
-              backgroundColor: '#1f1616',
-              border: '1px solid #ff3b3040',
+      {/* Info Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', backgroundColor: '#27272a', padding: '10px', borderRadius: '6px', border: '1px solid #3f3f46' }}>
+        <div><span style={{ color: '#a1a1aa' }}>Идентификатор:</span> <b style={{ color: '#fff' }}>{satellite.id}</b></div>
+        <div><span style={{ color: '#a1a1aa' }}>Плоскость:</span> <b style={{ color: '#fff' }}>P{satellite.plane}</b></div>
+        <div><span style={{ color: '#a1a1aa' }}>Высота:</span> <b style={{ color: '#fff' }}>{Math.round(satellite.altitude)} км</b></div>
+        <div><span style={{ color: '#a1a1aa' }}>Широта:</span> <b style={{ color: '#fff' }}>{satellite.sub_lat.toFixed(1)}°</b></div>
+        <div>
+          <span style={{ color: '#a1a1aa' }}>Температура бортовой ЭВМ:</span>{' '}
+          <b style={{ color: (satellite.temperature_c ?? 38) >= 80 ? '#ff3b30' : (satellite.temperature_c ?? 38) >= 60 ? '#ffaa00' : '#00ff88' }}>
+            {satellite.temperature_c ?? 38.5}°C {(satellite.temperature_c ?? 38) >= 80 ? '[ПЕРЕГРЕВ]' : ''}
+          </b>
+        </div>
+        <div>
+          <span style={{ color: '#a1a1aa' }}>Солнечные батареи:</span>{' '}
+          <b style={{ color: '#ffaa00' }}>
+            {satellite.solar_power_w ?? 1850} Вт (Номинал)
+          </b>
+        </div>
+        <div>
+          <span style={{ color: '#a1a1aa' }}>Заряд аккумуляторов (АКБ):</span>{' '}
+          <b style={{ color: '#00ff88' }}>
+            {satellite.battery_pct ?? 100}%
+          </b>
+        </div>
+      </div>
+
+      {/* Action Controls */}
+      {!isOffline ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <label style={{ color: '#a1a1aa', fontWeight: 500 }}>Задать длительность отказа (сек):</label>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
+            {[
+              { label: '5 мин', val: 300 },
+              { label: '30 мин', val: 1800 },
+              { label: '1 час', val: 3600 },
+              { label: '24 часа', val: 86400 }
+            ].map(item => (
+              <button
+                key={item.val}
+                onClick={() => setDuration(item.val)}
+                style={{
+                  padding: '6px 0',
+                  fontSize: '11px',
+                  backgroundColor: duration === item.val ? '#ffffff' : '#27272a',
+                  color: duration === item.val ? '#000000' : '#e2e8f0',
+                  border: `1px solid ${duration === item.val ? '#ffffff' : '#3f3f46'}`,
+                  borderRadius: '4px',
+                  fontWeight: duration === item.val ? 600 : 400,
+                  cursor: 'pointer'
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
+          <button
+            onClick={() => onApplyOutage(satellite.id, duration)}
+            style={{
+              backgroundColor: '#ff3b30',
+              color: '#fff',
+              border: 'none',
               borderRadius: '6px',
               padding: '10px',
-              fontSize: '11px',
-              color: '#aaa'
-            }}>
-              <b>ВАРИАНТ 2: Замена резервным КА из запаса</b>
-              <br />
-              Затраты: <b style={{ color: '#ff6666' }}>$830,000</b> ($650k CAPEX + $180k вывод).
+              fontWeight: 600,
+              fontSize: '12px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              marginTop: '4px'
+            }}
+          >
+            <Power size={14} />
+            <span>Вывести из строя ({duration >= 3600 ? `${duration/3600} ч` : `${duration/60} мин`})</span>
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{
+            backgroundColor: '#0c2419',
+            border: '1px solid #00ff8880',
+            borderRadius: '6px',
+            padding: '12px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '6px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontWeight: 'bold', color: '#00ff88' }}>💰 ВАРИАНТ 1: Перенастройка сетки ISL</span>
+              <span style={{ backgroundColor: '#00ff88', color: '#000', fontWeight: 'bold', fontSize: '9px', padding: '1px 5px', borderRadius: '3px' }}>
+                [САМЫЙ ВЫГОДНЫЙ]
+              </span>
             </div>
-
-            <button
-              onClick={() => onRestoreSatellite(satellite.id)}
-              style={{
-                backgroundColor: '#00ff88',
-                color: '#000',
-                border: 'none',
-                borderRadius: '4px',
-                padding: '10px',
-                fontWeight: 'bold',
-                fontSize: '12px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px'
-              }}
-            >
-              <CheckCircle size={14} />
-              <span>Восстановить работу КА (Компенсация выполнена)</span>
-            </button>
+            <p style={{ fontSize: '11px', color: '#bbb', margin: 0, lineHeight: '1.3' }}>
+              Перенаправление трафика через смежные КА кольца. Затраты: <b style={{ color: '#00ff88' }}>$25,000</b>. Экономия: <b style={{ color: '#00ff88' }}>$805,000</b>.
+            </p>
           </div>
-        )}
 
-      </div>
+          <button
+            onClick={() => onRestoreSatellite(satellite.id)}
+            style={{
+              backgroundColor: '#00ff88',
+              color: '#000',
+              border: 'none',
+              borderRadius: '6px',
+              padding: '10px',
+              fontWeight: 'bold',
+              fontSize: '12px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px'
+            }}
+          >
+            <CheckCircle size={14} />
+            <span>Восстановить работу КА</span>
+          </button>
+        </div>
+      )}
     </div>
   );
-};
-
-const closeButtonStyle: React.CSSProperties = {
-  backgroundColor: 'transparent',
-  color: '#888',
-  border: 'none',
-  cursor: 'pointer'
 };

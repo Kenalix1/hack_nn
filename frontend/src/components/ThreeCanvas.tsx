@@ -47,7 +47,9 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
     satLinks: THREE.Group;
     labels: THREE.Group;
     fovCones: THREE.Group;
+    packets: THREE.Group;
     atmosMesh?: THREE.Mesh;
+    starField?: THREE.Points;
   }>({
     earthGroup: new THREE.Group(),
     orbits: new THREE.Group(),
@@ -57,7 +59,8 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
     islLines: new THREE.Group(),
     satLinks: new THREE.Group(),
     labels: new THREE.Group(),
-    fovCones: new THREE.Group()
+    fovCones: new THREE.Group(),
+    packets: new THREE.Group()
   });
 
   const satMeshMapRef = useRef<Map<THREE.Mesh, Satellite>>(new Map());
@@ -91,7 +94,79 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
 
     // 1. Scene Setup
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x080b12);
+    scene.background = new THREE.Color(0x05070c);
+
+    // 1b. 3D Starfield Background
+    const starCount = 4500;
+    const starPositions = new Float32Array(starCount * 3);
+    const starColors = new Float32Array(starCount * 3);
+
+    for (let i = 0; i < starCount; i++) {
+      const u = Math.random();
+      const v = Math.random();
+      const theta = u * 2.0 * Math.PI;
+      const phi = Math.acos(2.0 * v - 1.0);
+      const r = 400 + Math.random() * 250;
+
+      starPositions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      starPositions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+      starPositions[i * 3 + 2] = r * Math.cos(phi);
+
+      const brightness = 0.65 + Math.random() * 0.35;
+      const tint = Math.random();
+      if (tint > 0.88) {
+        // Soft blue-white star glow
+        starColors[i * 3] = 0.8 * brightness;
+        starColors[i * 3 + 1] = 0.92 * brightness;
+        starColors[i * 3 + 2] = 1.0 * brightness;
+      } else if (tint > 0.72) {
+        // Warm white star
+        starColors[i * 3] = 1.0 * brightness;
+        starColors[i * 3 + 1] = 0.96 * brightness;
+        starColors[i * 3 + 2] = 0.88 * brightness;
+      } else {
+        // Pure silver white star
+        starColors[i * 3] = 0.95 * brightness;
+        starColors[i * 3 + 1] = 0.95 * brightness;
+        starColors[i * 3 + 2] = 0.95 * brightness;
+      }
+    }
+
+    const starGeo = new THREE.BufferGeometry();
+    starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+    starGeo.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
+
+    // Circular particle texture with soft radial glow
+    const starCanvas = document.createElement('canvas');
+    starCanvas.width = 32;
+    starCanvas.height = 32;
+    const starCtx = starCanvas.getContext('2d');
+    if (starCtx) {
+      const grad = starCtx.createRadialGradient(16, 16, 0, 16, 16, 16);
+      grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+      grad.addColorStop(0.2, 'rgba(240, 245, 255, 0.9)');
+      grad.addColorStop(0.5, 'rgba(200, 220, 255, 0.35)');
+      grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      starCtx.fillStyle = grad;
+      starCtx.beginPath();
+      starCtx.arc(16, 16, 16, 0, Math.PI * 2);
+      starCtx.fill();
+    }
+    const starTex = new THREE.CanvasTexture(starCanvas);
+
+    const starMat = new THREE.PointsMaterial({
+      size: 2.2,
+      map: starTex,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.95,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    const starPoints = new THREE.Points(starGeo, starMat);
+    scene.add(starPoints);
+    groupsRef.current.starField = starPoints;
 
     const camera = new THREE.PerspectiveCamera(
       45,
@@ -249,6 +324,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
     earthGroup.add(groupsRef.current.satLinks);
     earthGroup.add(groupsRef.current.labels);
     earthGroup.add(groupsRef.current.fovCones);
+    earthGroup.add(groupsRef.current.packets);
 
     scene.add(earthGroup);
 
@@ -271,6 +347,10 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
     const animate = () => {
       animId = requestAnimationFrame(animate);
       controls.update();
+
+      if (groupsRef.current.starField) {
+        groupsRef.current.starField.rotation.y += 0.00003;
+      }
       
       // Update label opacity based on visibility (front vs back of Earth)
       const camPos = camera.position.clone().normalize();
@@ -297,6 +377,16 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
         }
       });
 
+      // Animate Cisco Packet Tracer data packets flying along ground-to-satellite links
+      const curTimeSec = performance.now() * 0.001;
+      groupsRef.current.packets.children.forEach((child: THREE.Object3D) => {
+        const pData = (child as any).userData;
+        if (pData && pData.startPos && pData.endPos) {
+          const progress = ((curTimeSec * pData.speed) + pData.phase) % 1.0;
+          child.position.lerpVectors(pData.startPos, pData.endPos, progress);
+        }
+      });
+
       renderer.render(scene, camera);
     };
     animate();
@@ -313,23 +403,29 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
     };
   }, []);
 
-  // Smooth Camera Fly-to Target Satellite
+  // Smooth Camera Fly-to Target Satellite OR Reset to Earth Center
   useEffect(() => {
-    if (!focusedSatelliteId || !cameraRef.current || !controlsRef.current) return;
-    const targetPos = satPosMapRef.current[focusedSatelliteId];
-    if (!targetPos) return;
-
+    if (!cameraRef.current || !controlsRef.current) return;
     const camera = cameraRef.current;
     const controls = controlsRef.current;
 
-    // Camera target flys to satellite position
-    const camOffset = targetPos.clone().multiplyScalar(1.32);
+    let targetPos: THREE.Vector3;
+    let camOffset: THREE.Vector3;
+
+    if (focusedSatelliteId && satPosMapRef.current[focusedSatelliteId]) {
+      targetPos = satPosMapRef.current[focusedSatelliteId].clone();
+      camOffset = targetPos.clone().multiplyScalar(1.32);
+    } else {
+      // Detach from satellite back to full Earth view
+      targetPos = new THREE.Vector3(0, 0, 0);
+      camOffset = new THREE.Vector3(0, 0, 25);
+    }
 
     let step = 0;
     const flyInterval = setInterval(() => {
       step += 0.05;
-      controls.target.lerp(targetPos, 0.1);
-      camera.position.lerp(camOffset, 0.1);
+      controls.target.lerp(targetPos, 0.12);
+      camera.position.lerp(camOffset, 0.12);
       if (step >= 1.0) {
         clearInterval(flyInterval);
       }
@@ -342,14 +438,14 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
   useEffect(() => {
     if (!scenario) return;
 
-    const { earthGroup, orbits, satellites, gateways, gatewayDomes, islLines, satLinks, labels, fovCones, atmosMesh } = groupsRef.current;
+    const { earthGroup, orbits, satellites, gateways, gatewayDomes, islLines, satLinks, labels, fovCones, packets, atmosMesh } = groupsRef.current;
 
     if (atmosMesh) {
       atmosMesh.visible = settings.showAtmosphere;
       (atmosMesh.material as THREE.MeshBasicMaterial).color.set(settings.atmosphereColor || '#1e3a8a');
     }
 
-    [orbits, satellites, gateways, gatewayDomes, islLines, satLinks, labels, fovCones].forEach(g => {
+    [orbits, satellites, gateways, gatewayDomes, islLines, satLinks, labels, fovCones, packets].forEach(g => {
       while (g.children.length > 0) {
         g.remove(g.children[0]);
       }
@@ -368,7 +464,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
     const planeMap: Record<number, Array<{ sat: Satellite; pos: THREE.Vector3; posKm: THREE.Vector3; isOffline: boolean; isHighLatency: boolean; uAngle: number }>> = {};
     const satPosMap: Record<string, THREE.Vector3> = {};
 
-    const activeSatMat = new THREE.MeshBasicMaterial({ color: settings.satColor || '#00f0ff' });
+    const activeSatMat = new THREE.MeshBasicMaterial({ color: settings.satColor || '#ffffff' });
     const highLatencySatMat = new THREE.MeshBasicMaterial({ color: settings.highLatencySatColor || '#ff9900' });
     const offlineSatMat = new THREE.MeshBasicMaterial({ color: settings.offlineSatColor || '#ff3b30' });
     const satGeo = new THREE.SphereGeometry(0.22 * settings.satSize, 16, 16);
@@ -410,8 +506,20 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
 
     const onlineSatPosList: THREE.Vector3[] = [];
 
+    // Find max plane num to distribute default RAAN evenly if missing
+    let maxPlaneNum = 1;
     (scenario.satellites || []).forEach(sat => {
-      const planeNum = sat.plane;
+      const pNum = typeof sat.plane === 'number'
+        ? sat.plane
+        : parseInt(String((sat as any).plane_id || sat.plane || '1').replace('P', '')) || 1;
+      if (pNum > maxPlaneNum) maxPlaneNum = pNum;
+    });
+
+    (scenario.satellites || []).forEach(sat => {
+      const planeNum = typeof sat.plane === 'number'
+        ? sat.plane
+        : parseInt(String((sat as any).plane_id || sat.plane || '1').replace('P', '')) || 1;
+
       const isVisible = !isSatHidden(sat.id);
       const isOffline = offlineSet.has(sat.id);
       const isHighLatency = !isOffline && highLatencySatSet.has(sat.id);
@@ -420,9 +528,35 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
       const orbRadiusKm = 6371.0 + altKm;
       const rThree = earthRadius + (altKm / 1000.0) * 1.2;
 
-      const baseRaanDeg = planeBaseMap[planeNum]?.raanDeg ?? sat.raan ?? ((planeNum - 1) * 60);
-      const basePhaseDeg = planeBaseMap[planeNum]?.phaseDeg ?? ((planeNum - 1) * 15);
-      
+      let baseRaanDeg: number;
+      if (planeBaseMap[planeNum]?.raanDeg !== undefined) {
+        baseRaanDeg = planeBaseMap[planeNum].raanDeg;
+      } else if (typeof sat.raan === 'number' && sat.raan > 0) {
+        baseRaanDeg = sat.raan;
+      } else {
+        baseRaanDeg = (planeNum - 1) * (360.0 / Math.max(1, maxPlaneNum));
+      }
+
+      let basePhaseDeg: number;
+      if (planeBaseMap[planeNum]?.phaseDeg !== undefined) {
+        basePhaseDeg = planeBaseMap[planeNum].phaseDeg;
+      } else if (typeof (sat as any).phase === 'number') {
+        basePhaseDeg = (sat as any).phase;
+      } else {
+        basePhaseDeg = (planeNum - 1) * 15.0;
+      }
+
+      let slotDeg = 0;
+      if (typeof (sat as any).slot_deg === 'number') {
+        slotDeg = (sat as any).slot_deg;
+      } else if (typeof (sat as any).slot === 'number') {
+        slotDeg = (sat as any).slot;
+      } else if (typeof sat.true_anomaly === 'number' && sat.true_anomaly !== 0) {
+        slotDeg = sat.true_anomaly;
+      } else if (typeof sat.idx === 'number') {
+        slotDeg = sat.idx >= 15 ? sat.idx : sat.idx * 45;
+      }
+
       const raanOffsetDeg = (settings?.planeRaanMap && settings.planeRaanMap[planeNum]) ?? 0;
       const phaseOffsetDeg = (settings?.planePhaseMap && settings.planePhaseMap[planeNum]) ?? 0;
 
@@ -430,7 +564,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
       const totalPhaseRad = ((basePhaseDeg + phaseOffsetDeg) % 360) * (Math.PI / 180);
 
       const n = Math.sqrt(MU / Math.pow(orbRadiusKm, 3));
-      const slotRad = (sat.true_anomaly || sat.idx * 45 || 0) * (Math.PI / 180);
+      const slotRad = slotDeg * (Math.PI / 180);
       const u = slotRad + totalPhaseRad + n * currentTime;
       const inc = (sat.inc || 87.0) * (Math.PI / 180);
 
@@ -815,7 +949,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
           const line = new THREE.Line(lineGeo, lineMat);
           islLines.add(line);
 
-          if (settings.showDistances !== false) {
+          if (settings.showDistances === true) {
             const distKm = Math.round(itemA.posKm.distanceTo(itemB.posKm));
             const midPos = getArcMidPoint(itemA.pos, itemB.pos, 0.15);
             const isFocused = itemA.sat.id === focusedSatelliteId || itemB.sat.id === focusedSatelliteId;
@@ -882,7 +1016,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
             const line = new THREE.Line(lineGeo, lineMat);
             islLines.add(line);
 
-            if (settings.showDistances !== false) {
+            if (settings.showDistances === true) {
               const distKm = Math.round(itemA.posKm.distanceTo(closestPosKm));
               const midPos = getArcMidPoint(itemA.pos, closestPos, 0.15);
               const isFocused = itemA.sat.id === focusedSatelliteId;
@@ -905,6 +1039,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
       activeRoutes.forEach(route => {
         const path = route.path || [];
         const isRouteBroken = path.some(sid => offlineSet.has(sid));
+        const isFocusedRoute = !!(focusedSatelliteId && path.includes(focusedSatelliteId));
 
         if (path.length >= 2) {
           for (let i = 0; i < path.length - 1; i++) {
@@ -924,17 +1059,34 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
             const isGroundLink = !!(gwPosMap[nodeA] || gwPosMap[nodeB]);
 
             if (posA && posB) {
+              if (isGroundLink) {
+                const gwPos = gwPosMap[nodeA] || gwPosMap[nodeB];
+                const satPos = gwPosMap[nodeA] ? posB : posA;
+                if (!isSatVisibleFromGround(gwPos, satPos, 0.0)) {
+                  continue; // Skip rendering ground link cutting through solid Earth
+                }
+              }
+
               const linePoints = isGroundLink ? [posA, posB] : createCurvedArcPoints(posA, posB, 20);
               const lineGeo = new THREE.BufferGeometry().setFromPoints(linePoints);
+
+              const lineColor = isRouteBroken
+                ? settings.offlineSatColor
+                : isFocusedRoute
+                ? '#00ff88'
+                : isGroundLink
+                ? (settings.groundLinkColor || '#94a3b8')
+                : (settings.islColor || '#cbd5e1');
+
               const lineMat = new THREE.LineBasicMaterial({
-                color: isRouteBroken ? settings.offlineSatColor : isGroundLink ? (settings.groundLinkColor || '#f59e0b') : (settings.islColor || '#00f0ff'),
+                color: lineColor,
                 transparent: true,
-                opacity: isRouteBroken ? 0.9 : isGroundLink ? 0.95 : 0.85
+                opacity: isFocusedRoute ? 1.0 : isRouteBroken ? 0.9 : isGroundLink ? 0.95 : 0.85
               });
               const line = new THREE.Line(lineGeo, lineMat);
               satLinks.add(line);
 
-              if (isGroundLink && settings.showDistances !== false) {
+              if (isGroundLink && settings.showDistances === true) {
                 const gwPos = gwPosMap[nodeA] || gwPosMap[nodeB];
                 const satPos = gwPosMap[nodeA] ? posB : posA;
                 const distKm = calculateGroundToSatDistance(gwPos, satPos, scenarioAltKm);
@@ -943,20 +1095,57 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
                 distSprite.position.copy(midPos);
                 labels.add(distSprite);
               }
+
+              if (isGroundLink || isFocusedRoute) {
+                // Spawn Cisco Packet Tracer animated packets along link
+                const pktColor = isRouteBroken
+                  ? settings.offlineSatColor
+                  : isFocusedRoute
+                  ? '#00ff88'
+                  : (settings.groundLinkColor || '#94a3b8');
+
+                const numPkts = isFocusedRoute ? 4 : 2;
+                for (let k = 0; k < numPkts; k++) {
+                  const pktUp = createCiscoPacketSprite(pktColor);
+                  (pktUp as any).userData = {
+                    startPos: posA.clone(),
+                    endPos: posB.clone(),
+                    speed: isFocusedRoute ? 1.2 : 0.65,
+                    phase: k / numPkts
+                  };
+                  packets.add(pktUp);
+
+                  const pktDown = createCiscoPacketSprite(isFocusedRoute ? '#ffffff' : '#38bdf8');
+                  (pktDown as any).userData = {
+                    startPos: posB.clone(),
+                    endPos: posA.clone(),
+                    speed: isFocusedRoute ? 1.3 : 0.75,
+                    phase: (k + 0.5) / numPkts
+                  };
+                  packets.add(pktDown);
+                }
+              }
             }
           }
         }
       });
 
-      // 2. Default straight ray beam connections from ground sites to overhead satellites
+      // 2. Default straight ray beam connections from ground sites to OVERHEAD satellites (above horizon)
+      const minElevDeg = scenario.raw_scenario?.environment?.min_elevation_deg ?? 10.0;
+
       Object.keys(gwPosMap).forEach(gwId => {
         if (isGwHidden(gwId)) return;
         const gwPos = gwPosMap[gwId];
 
-        const visibleSats = (scenario.satellites || []).filter(s => !isSatHidden(s.id));
-        const sortedSats = visibleSats
-          .map(s => ({ pos: satPosMap[s.id], dist: satPosMap[s.id] ? gwPos.distanceTo(satPosMap[s.id]) : Infinity }))
-          .filter(item => item.pos && item.dist < Infinity)
+        const sortedSats = (scenario.satellites || [])
+          .filter(s => !isSatHidden(s.id))
+          .map(s => {
+            const satPos = satPosMap[s.id];
+            if (!satPos) return null;
+            if (!isSatVisibleFromGround(gwPos, satPos, minElevDeg)) return null;
+            return { pos: satPos, dist: gwPos.distanceTo(satPos) };
+          })
+          .filter((item): item is { pos: THREE.Vector3; dist: number } => item !== null)
           .sort((a, b) => a.dist - b.dist);
 
         sortedSats.slice(0, 2).forEach(item => {
@@ -969,12 +1158,34 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
           const line = new THREE.Line(lineGeo, lineMat);
           satLinks.add(line);
 
-          if (settings.showDistances !== false) {
+          if (settings.showDistances === true) {
             const distKm = calculateGroundToSatDistance(gwPos, item.pos, scenarioAltKm);
             const midPos = new THREE.Vector3().addVectors(gwPos, item.pos).multiplyScalar(0.51);
             const distSprite = createDistanceLabelSprite(`${distKm} км`, true);
             distSprite.position.copy(midPos);
             labels.add(distSprite);
+          }
+
+          // Add Cisco Packet Tracer animated packets flying to/from ground station
+          const pktColor = settings.groundLinkColor || '#f59e0b';
+          for (let k = 0; k < 2; k++) {
+            const pktUp = createCiscoPacketSprite(pktColor);
+            (pktUp as any).userData = {
+              startPos: gwPos.clone(),
+              endPos: item.pos.clone(),
+              speed: 0.7,
+              phase: k * 0.5
+            };
+            packets.add(pktUp);
+
+            const pktDown = createCiscoPacketSprite('#34d399');
+            (pktDown as any).userData = {
+              startPos: item.pos.clone(),
+              endPos: gwPos.clone(),
+              speed: 0.8,
+              phase: (k + 0.5) * 0.5
+            };
+            packets.add(pktDown);
           }
         });
       });
@@ -1182,6 +1393,19 @@ function isLineOccludedByEarthKm(posAKm: THREE.Vector3, posBKm: THREE.Vector3, r
   return closest.length() <= rEarthKm;
 }
 
+function isSatVisibleFromGround(gwPos: THREE.Vector3, satPos: THREE.Vector3, minElevationDeg: number = 0.0): boolean {
+  const gwNormal = gwPos.clone().normalize();
+  const dirToSat = satPos.clone().sub(gwPos);
+  const dist = dirToSat.length();
+  if (dist < 0.001) return false;
+
+  dirToSat.divideScalar(dist);
+  const sinElevation = dirToSat.dot(gwNormal);
+  const minSinElevation = Math.sin((minElevationDeg * Math.PI) / 180);
+
+  return sinElevation >= minSinElevation;
+}
+
 function createEarth2026FallbackCanvas(): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = 2048;
@@ -1300,4 +1524,51 @@ function createSunFlareTexture(): THREE.Texture {
   ctx.fillRect(0, 0, 128, 128);
 
   return new THREE.CanvasTexture(canvas);
+}
+
+function createCiscoPacketSprite(colorHex: string): THREE.Sprite {
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d')!;
+
+  ctx.imageSmoothingEnabled = true;
+
+  // Outer glowing aura
+  const grad = ctx.createRadialGradient(32, 32, 2, 32, 32, 28);
+  grad.addColorStop(0, '#ffffff');
+  grad.addColorStop(0.4, colorHex);
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(32, 32, 28, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Cisco Packet shape (small glowing data envelope / packet box)
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(18, 20, 28, 24);
+  ctx.strokeStyle = colorHex;
+  ctx.lineWidth = 3;
+  ctx.strokeRect(18, 20, 28, 24);
+
+  // Packet line chevron symbol (Cisco Packet Tracer emblem)
+  ctx.strokeStyle = colorHex;
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(22, 27);
+  ctx.lineTo(32, 35);
+  ctx.lineTo(42, 27);
+  ctx.stroke();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    opacity: 0.95,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(0.24, 0.24, 1);
+  return sprite;
 }

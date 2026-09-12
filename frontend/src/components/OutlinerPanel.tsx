@@ -638,12 +638,6 @@ export const OutlinerPanel: React.FC<OutlinerPanelProps> = ({
                       {sat.temperature_c ?? 20}°C
                     </span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#aaa' }}>Топливо</span>
-                    <span style={{ color: (sat.fuel_pct || 100) < 30 ? '#ff9900' : '#00ff88' }}>
-                      {sat.fuel_pct ?? 100}%
-                    </span>
-                  </div>
                 </div>
               </div>
             );

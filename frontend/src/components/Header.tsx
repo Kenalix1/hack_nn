@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, RotateCcw, Clock, Layers, BarChart2, Settings, Copy, PanelRight, Upload, Download, FileJson, ChevronDown, ShieldAlert, Menu, X } from 'lucide-react';
+import { Play, RotateCcw, Layers, BarChart2, Settings, Copy, PanelRight, ShieldAlert } from 'lucide-react';
 
 interface HeaderProps {
   scenarios: Array<{ id: string; title: string }>;
@@ -30,21 +30,9 @@ export const Header: React.FC<HeaderProps> = ({
   isSidebarOpen,
   isSimulating
 }) => {
-  const [utcTime, setUtcTime] = useState<string>('');
   const [isExportMenuOpen, setIsExportMenuOpen] = useState<boolean>(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const exportMenuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const updateTime = () => {
-      const now = new Date();
-      setUtcTime(now.toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
-    };
-    updateTime();
-    const interval = setInterval(updateTime, 1000);
-    return () => clearInterval(interval);
-  }, []);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -130,12 +118,12 @@ export const Header: React.FC<HeaderProps> = ({
           width: 28px;
           height: 28px;
           border-radius: 6px;
-          background: linear-gradient(135deg, #2563eb, #1d4ed8);
+          background: linear-gradient(135deg, #52525b, #27272a);
           display: flex;
           align-items: center;
           justify-content: center;
           color: #ffffff;
-          box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35);
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
         }
 
         .hdr-divider {
@@ -158,22 +146,14 @@ export const Header: React.FC<HeaderProps> = ({
         }
 
         .hdr-select {
-          height: 32px;
-          background-color: #20242b;
-          color: #f1f5f9;
+          background-color: #1a1d22;
+          color: #f8fafc;
           border: 1px solid #333943;
           border-radius: 6px;
-          padding: 0 10px;
+          padding: 4px 8px;
           font-size: 12px;
-          font-weight: 500;
           outline: none;
           cursor: pointer;
-          transition: all 0.15s ease;
-        }
-
-        .hdr-select:hover {
-          background-color: #272c35;
-          border-color: #454d5b;
         }
 
         .hdr-btn {
@@ -185,13 +165,10 @@ export const Header: React.FC<HeaderProps> = ({
           cursor: pointer;
           display: inline-flex;
           align-items: center;
-          justify-content: center;
           gap: 6px;
-          box-sizing: border-box;
-          white-space: nowrap;
           transition: all 0.15s ease-in-out;
-          outline: none;
-          user-select: none;
+          white-space: nowrap;
+          box-sizing: border-box;
         }
 
         .hdr-btn-secondary {
@@ -211,16 +188,17 @@ export const Header: React.FC<HeaderProps> = ({
         }
 
         .hdr-btn-primary {
-          background: linear-gradient(135deg, #2563eb, #1d4ed8);
-          color: #ffffff;
-          border: 1px solid #3b82f6;
-          box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+          background: #ffffff;
+          color: #000000;
+          border: 1px solid #ffffff;
+          box-shadow: 0 2px 6px rgba(255, 255, 255, 0.2);
+          font-weight: 600;
         }
 
         .hdr-btn-primary:hover:not(:disabled) {
-          background: linear-gradient(135deg, #3b82f6, #2563eb);
-          border-color: #60a5fa;
-          box-shadow: 0 3px 10px rgba(37, 99, 235, 0.45);
+          background: #e2e8f0;
+          border-color: #cbd5e1;
+          box-shadow: 0 3px 10px rgba(255, 255, 255, 0.35);
         }
 
         .hdr-btn-primary:disabled {
@@ -350,93 +328,22 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Brand & Scenario Selector & Upload */}
       <div className="hdr-section">
-        <div className="hdr-brand">
+        <div className="hdr-brand" title="Система Анализа Группировки">
           <div className="hdr-brand-icon">
             <Layers size={16} />
           </div>
-          <span className="hdr-brand-text">Система Анализа Группировки</span>
         </div>
 
         <div className="hdr-divider" />
 
-        <div className="hdr-select-wrapper">
-          <span className="hdr-label">Сценарий:</span>
-          <select
-            className="hdr-select"
-            value={activeScenario}
-            onChange={(e) => onSelectScenario(e.target.value)}
-          >
-            {scenarios.map(s => (
-              <option key={s.id} value={s.id}>{s.title}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Upload JSON Button */}
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileChange}
-          accept=".json"
-          style={{ display: 'none' }}
-        />
         <button
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => onOpenWindow('scenarios')}
           className="hdr-btn hdr-btn-secondary"
-          title="Загрузить пользовательский сценарий из JSON файла"
+          title="Открыть отдельное окно управления сценариями"
         >
-          <Upload size={14} style={{ color: '#34d399' }} />
-          <span>Загрузить JSON</span>
+          <Layers size={14} style={{ color: '#38bdf8' }} />
+          <span>Сценарии</span>
         </button>
-
-        {/* Export JSON Dropdown Button */}
-        <div style={{ position: 'relative' }} ref={exportMenuRef}>
-          <button
-            onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
-            className="hdr-btn hdr-btn-secondary"
-            title="Скачать итоговый JSON сценарий или результаты моделирования"
-          >
-            <Download size={14} style={{ color: '#38bdf8' }} />
-            <span>Скачать JSON</span>
-            <ChevronDown size={12} style={{ opacity: 0.7 }} />
-          </button>
-
-          {isExportMenuOpen && (
-            <div className="hdr-dropdown-menu">
-              {onExportScenarioJson && (
-                <button
-                  onClick={() => {
-                    onExportScenarioJson();
-                    setIsExportMenuOpen(false);
-                  }}
-                  className="hdr-dropdown-item"
-                >
-                  <FileJson size={16} style={{ color: '#34d399' }} />
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: '12px' }}>Итоговый Сценарий (.json)</div>
-                    <div style={{ fontSize: '11px', color: '#94a3b8' }}>Конфигурация cosmo-A-1.0</div>
-                  </div>
-                </button>
-              )}
-
-              {onExportResultsJson && (
-                <button
-                  onClick={() => {
-                    onExportResultsJson();
-                    setIsExportMenuOpen(false);
-                  }}
-                  className="hdr-dropdown-item"
-                >
-                  <BarChart2 size={16} style={{ color: '#38bdf8' }} />
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: '12px' }}>Результаты Симуляции (.json)</div>
-                    <div style={{ fontSize: '11px', color: '#94a3b8' }}>Метрики видимости, SLA, маршруты</div>
-                  </div>
-                </button>
-              )}
-            </div>
-          )}
-        </div>
 
         <button
           onClick={onRunSimulation}
@@ -491,22 +398,8 @@ export const Header: React.FC<HeaderProps> = ({
         )}
       </div>
 
-      {/* Right UTC Tracker & Outliner Toggle */}
+      {/* Right Actions & Outliner Toggle */}
       <div className="hdr-section">
-        <div className="hdr-clock">
-          <Clock size={14} />
-          <span>{utcTime}</span>
-        </div>
-
-        {/* Mobile Hamburger Menu Toggle Button */}
-        <button
-          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className="hdr-btn hdr-btn-secondary hdr-mobile-trigger"
-          title="Меню навигации"
-        >
-          {isMobileMenuOpen ? <X size={16} /> : <Menu size={16} />}
-        </button>
-
         <button
           onClick={onToggleSidebar}
           title="Панель элементов (Аутлайнер)"
@@ -515,58 +408,6 @@ export const Header: React.FC<HeaderProps> = ({
           <PanelRight size={16} />
         </button>
       </div>
-
-      {/* Mobile Drawer Menu Dropdown */}
-      {isMobileMenuOpen && (
-        <div
-          className="hdr-mobile-drawer"
-          style={{
-            position: 'absolute',
-            top: '48px',
-            left: 0,
-            width: '100vw',
-            backgroundColor: '#16181d',
-            borderBottom: '1px solid #333',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
-            padding: '12px 16px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px',
-            zIndex: 99
-          }}
-        >
-          <button
-            onClick={() => { onOpenWindow('emergency'); setIsMobileMenuOpen(false); }}
-            className="hdr-btn"
-            style={{ backgroundColor: '#3b1212', color: '#ff6666', border: '1px solid #7f1d1d', justifyContent: 'flex-start' }}
-          >
-            <ShieldAlert size={14} style={{ color: '#ff4444' }} />
-            <span>Симуляция ЧС & Экономика</span>
-          </button>
-
-          <button onClick={() => { onOpenWindow('analytics'); setIsMobileMenuOpen(false); }} className="hdr-btn hdr-btn-secondary" style={{ justifyContent: 'flex-start' }}>
-            <BarChart2 size={14} style={{ color: '#38bdf8' }} />
-            <span>Аналитика & Диаграмма Гантта</span>
-          </button>
-
-          <button onClick={() => { onOpenWindow('configurator'); setIsMobileMenuOpen(false); }} className="hdr-btn hdr-btn-secondary" style={{ justifyContent: 'flex-start' }}>
-            <Settings size={14} style={{ color: '#a78bfa' }} />
-            <span>Конфигуратор Параметров</span>
-          </button>
-
-          <button onClick={() => { onOpenWindow('compare'); setIsMobileMenuOpen(false); }} className="hdr-btn hdr-btn-secondary" style={{ justifyContent: 'flex-start' }}>
-            <Copy size={14} style={{ color: '#fbbf24' }} />
-            <span>Сравнение Проектов</span>
-          </button>
-
-          {onResetState && (
-            <button onClick={() => { onResetState(); setIsMobileMenuOpen(false); }} className="hdr-btn hdr-btn-danger" style={{ justifyContent: 'flex-start' }}>
-              <RotateCcw size={13} />
-              <span>Сбросить Настройки</span>
-            </button>
-          )}
-        </div>
-      )}
     </header>
   );
 };
