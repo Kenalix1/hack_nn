@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, RotateCcw, Layers, BarChart2, Settings, Copy, PanelRight, ShieldAlert, FileText } from 'lucide-react';
+import { Play, RotateCcw, Layers, BarChart2, Settings, Copy, PanelRight, ShieldAlert, FileText, Map } from 'lucide-react';
 
 interface HeaderProps {
   scenarios: Array<{ id: string; title: string }>;
@@ -371,6 +371,11 @@ export const Header: React.FC<HeaderProps> = ({
         >
           <ShieldAlert size={14} style={{ color: '#ff4444' }} />
           <span>Симуляция ЧС</span>
+        </button>
+
+        <button onClick={() => onOpenWindow('map2d')} className="hdr-btn hdr-btn-secondary" title="Открыть плавающее окно 2D Карты с трассами орбит">
+          <Map size={14} style={{ color: '#00ff88' }} />
+          <span>2D Карта</span>
         </button>
 
         <button onClick={() => onOpenWindow('analytics')} className="hdr-btn hdr-btn-secondary">

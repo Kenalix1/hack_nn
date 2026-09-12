@@ -13,6 +13,7 @@ import { CriticalSatellitesAlertBar } from './components/CriticalSatellitesAlert
 import { SatelliteOutageModal } from './components/SatelliteOutageModal';
 import { EmergencyModal } from './components/EmergencyModal';
 import { ScenariosModal } from './components/ScenariosModal';
+import { TwoDMapModal } from './components/TwoDMapModal';
 import { ScenarioData, OutlinerSettings, LogMessage, Satellite, SatelliteOutage } from './types';
 import { openPdfReport } from './utils/generatePdfReport';
 import { Eye, RotateCcw } from 'lucide-react';
@@ -70,6 +71,7 @@ const defaultOutlinerSettings: OutlinerSettings = {
 };
 
 const defaultWindows: Record<string, { isOpen: boolean; zIndex: number }> = {
+  map2d: { isOpen: false, zIndex: 9 },
   analytics: { isOpen: false, zIndex: 10 },
   configurator: { isOpen: false, zIndex: 11 },
   compare: { isOpen: false, zIndex: 12 },
@@ -823,6 +825,27 @@ export const App: React.FC = () => {
             onClose={() => setSelectedSatellite(null)}
             onApplyOutage={handleApplyOutage}
             onRestoreSatellite={handleRestoreSatellite}
+          />
+        </DraggableWindow>
+
+        <DraggableWindow
+          id="map2d"
+          title="2D Карта Орбитальной Группировки (Equirectangular Lat/Lon)"
+          isOpen={windows.map2d?.isOpen ?? false}
+          onClose={() => closeWindow('map2d')}
+          zIndex={windows.map2d?.zIndex ?? 9}
+          onFocus={() => focusWindow('map2d')}
+          initialPos={{ x: 100, y: 50, width: 860, height: 530 }}
+        >
+          <TwoDMapModal
+            scenario={scenarioData}
+            outages={currentOutages}
+            currentTime={currentTimeSeconds}
+            settings={outlinerSettings}
+            onSelectSatellite={(satId) => {
+              const s = scenarioData?.satellites.find(x => x.id === satId);
+              if (s) setSelectedSatellite(s);
+            }}
           />
         </DraggableWindow>
 
