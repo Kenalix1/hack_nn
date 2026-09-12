@@ -7,6 +7,7 @@ import { DraggableWindow } from './components/DraggableWindow';
 import { AnalyticsModal } from './components/AnalyticsModal';
 import { ConfiguratorModal } from './components/ConfiguratorModal';
 import { CompareModal } from './components/CompareModal';
+import { MassSimulationModal } from "./components/MassSimulationModal";
 import { EventLogPanel } from './components/EventLogPanel';
 import { TimelineBar } from './components/TimelineBar';
 import { CriticalSatellitesAlertBar } from './components/CriticalSatellitesAlertBar';
@@ -80,6 +81,7 @@ const defaultWindows: Record<string, { isOpen: boolean; zIndex: number }> = {
   configurator: { isOpen: false, zIndex: 11 },
   compare: { isOpen: false, zIndex: 12 },
   emergency: { isOpen: false, zIndex: 13 },
+  monteCarlo: { isOpen: false, zIndex: 14 },
   scenarios: { isOpen: false, zIndex: 14 },
   satellite_detail: { isOpen: false, zIndex: 15 },
   recommendations: { isOpen: false, zIndex: 16 }
@@ -946,6 +948,32 @@ export const App: React.FC = () => {
           />
         </DraggableWindow>
 
+
+        {/* Windows: Monte Carlo Analysis */}
+        <DraggableWindow
+          id="monteCarlo"
+          title="Анализ Монте-Карло (Big Data)"
+          isOpen={windows.monteCarlo?.isOpen}
+          onClose={() => closeWindow('monteCarlo')}
+          zIndex={windows.monteCarlo?.zIndex || 12}
+          onFocus={() => focusWindow('monteCarlo')}
+          initialPos={{ x: 120, y: 120, width: 900, height: 600 }}
+        >
+          <MassSimulationModal 
+            scenario={currentRawScenario}
+            onClose={() => closeWindow('monteCarlo')}
+            onDrillDown={(failures) => {
+               // Similar to CompareModal's handleDrillDown
+               if (currentRawScenario && handleVisualizeScenario) {
+                   const newScenario = JSON.parse(JSON.stringify(currentRawScenario));
+                   newScenario.failures = failures;
+                   handleVisualizeScenario(newScenario, { satellites: [] }); 
+                   closeWindow('monteCarlo');
+               }
+            }}
+            onSetCriticalSatellites={setCriticalSatellites}
+          />
+        </DraggableWindow>
         {/* Windows: Emergency Simulation & Economic Recommendations */}
         <EmergencyModal
           isOpen={windows.emergency?.isOpen}

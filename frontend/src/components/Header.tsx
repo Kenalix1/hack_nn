@@ -429,6 +429,11 @@ export const Header: React.FC<HeaderProps> = ({
           <span>Сравнение Проектов</span>
         </button>
 
+        <button onClick={() => onOpenWindow('monteCarlo')} className="hdr-btn hdr-btn-secondary" title="Анализ методом Монте-Карло">
+          <Activity size={14} style={{ color: '#00ff88' }} />
+          <span>Монте-Карло Анализ</span>
+        </button>
+
         {onOpenPdfReport && (
           <button
             onClick={onOpenPdfReport}
