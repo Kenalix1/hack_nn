@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BarChart2, Activity, ShieldCheck, Zap, Server, AlertTriangle, CheckCircle2, XCircle, DollarSign, Flame, Fuel, ArrowRight, Clock, Globe, Layers, Download } from 'lucide-react';
+import { BarChart2, Activity, ShieldCheck, Zap, Server, AlertTriangle, CheckCircle2, XCircle, DollarSign, Flame, Fuel, ArrowRight, Clock, Globe, Layers, Download, FileText } from 'lucide-react';
 import { ScenarioData, SatelliteOutage } from '../types';
 import { getDynamicSatelliteTelemetry } from '../utils/telemetry';
 import { EmergencyRecommendationsModal } from './EmergencyRecommendationsModal';
@@ -10,6 +10,7 @@ interface AnalyticsModalProps {
   currentTime?: number;
   onApplyRecommendation?: (recType: string) => void;
   onExportResultsJson?: () => void;
+  onOpenPdfReport?: () => void;
 }
 
 export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
@@ -17,7 +18,8 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
   outages = [],
   currentTime = 0,
   onApplyRecommendation,
-  onExportResultsJson
+  onExportResultsJson,
+  onOpenPdfReport
 }) => {
   const [activeTab, setActiveTab] = useState<'metrics' | 'clients' | 'gantt' | 'coverage' | 'vulnerability' | 'routes' | 'economic'>('metrics');
   const [dismissedEconRecs, setDismissedEconRecs] = useState<Set<number>>(new Set());
@@ -87,6 +89,29 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
           <div style={{ display: 'flex', gap: '12px', fontSize: '11px', color: '#ccc' }}>
             <span>Отказов КА: <b style={{ color: offlineCount > 0 ? '#ff3b30' : '#888' }}>{offlineCount}</b></span>
           </div>
+
+          {onOpenPdfReport && (
+            <button
+              onClick={onOpenPdfReport}
+              style={{
+                backgroundColor: '#1e293b',
+                color: '#38bdf8',
+                border: '1px solid #0284c7',
+                borderRadius: '4px',
+                padding: '3px 8px',
+                fontSize: '11px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+              title="Сгенерировать 4-страничный научно-технический PDF отчёт"
+            >
+              <FileText size={13} />
+              <span>Отчёт PDF</span>
+            </button>
+          )}
 
           {onExportResultsJson && (
             <button

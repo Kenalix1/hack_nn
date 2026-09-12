@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, RotateCcw, Layers, BarChart2, Settings, Copy, PanelRight, ShieldAlert } from 'lucide-react';
+import { Play, RotateCcw, Layers, BarChart2, Settings, Copy, PanelRight, ShieldAlert, FileText } from 'lucide-react';
 
 interface HeaderProps {
   scenarios: Array<{ id: string; title: string }>;
@@ -11,6 +11,7 @@ interface HeaderProps {
   onUploadScenarioJson: (json: any) => void;
   onExportScenarioJson?: () => void;
   onExportResultsJson?: () => void;
+  onOpenPdfReport?: () => void;
   onResetState?: () => void;
   isSidebarOpen: boolean;
   isSimulating: boolean;
@@ -26,6 +27,7 @@ export const Header: React.FC<HeaderProps> = ({
   onUploadScenarioJson,
   onExportScenarioJson,
   onExportResultsJson,
+  onOpenPdfReport,
   onResetState,
   isSidebarOpen,
   isSimulating
@@ -385,6 +387,18 @@ export const Header: React.FC<HeaderProps> = ({
           <Copy size={14} style={{ color: '#fbbf24' }} />
           <span>Сравнение Проектов</span>
         </button>
+
+        {onOpenPdfReport && (
+          <button
+            onClick={onOpenPdfReport}
+            className="hdr-btn hdr-btn-secondary"
+            style={{ backgroundColor: '#1e293b', borderColor: '#38bdf8', color: '#38bdf8' }}
+            title="Сгенерировать 4-страничный научно-технический PDF отчёт"
+          >
+            <FileText size={14} />
+            <span>Отчёт PDF</span>
+          </button>
+        )}
 
         {onResetState && (
           <button

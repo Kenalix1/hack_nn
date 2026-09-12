@@ -14,6 +14,7 @@ import { SatelliteOutageModal } from './components/SatelliteOutageModal';
 import { EmergencyModal } from './components/EmergencyModal';
 import { ScenariosModal } from './components/ScenariosModal';
 import { ScenarioData, OutlinerSettings, LogMessage, Satellite, SatelliteOutage } from './types';
+import { openPdfReport } from './utils/generatePdfReport';
 import { Eye, RotateCcw } from 'lucide-react';
 
 const LOCAL_STORAGE_KEY = 'cosmo_app_saved_state_v2';
@@ -763,6 +764,7 @@ export const App: React.FC = () => {
         onUploadScenarioJson={handleUploadScenarioJson}
         onExportScenarioJson={handleExportScenarioJson}
         onExportResultsJson={handleExportResultsJson}
+        onOpenPdfReport={() => openPdfReport(scenarioData)}
         onResetState={handleResetState}
         isSidebarOpen={isSidebarOpen}
         isSimulating={isSimulating}
@@ -873,6 +875,7 @@ export const App: React.FC = () => {
             currentTime={currentTimeSeconds}
             onApplyRecommendation={handleApplyRecommendation}
             onExportResultsJson={handleExportResultsJson}
+            onOpenPdfReport={() => openPdfReport(scenarioData)}
           />
         </DraggableWindow>
 
