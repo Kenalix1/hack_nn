@@ -88,6 +88,74 @@ export interface SimulationResultData {
     routes: Record<string, string[]>;
   }>;
   recommendations?: string[];
+  monte_carlo?: MonteCarloData;
+}
+
+export interface MonteCarloScenarioResult {
+  scenario_meta: { id: string; title: string };
+  mc_type: string;
+  mc_prob: number;
+  mc_failed_count: number;
+  failed_sat_ids?: string[];
+  remediation_plan: string;
+  remediation_cost: number;
+  remediation_delay_days?: number;
+  risk_expectation: number;
+  overall_availability: number;
+  all_targets_met: boolean;
+  total_annual_cost_usd: number;
+  simulation_result?: any;
+  raw_scenario?: any;
+  severity_tier?: 'best' | 'worst' | 'moderate';
+  severity_label?: string;
+  is_best_case?: boolean;
+  is_worst_case?: boolean;
+  title?: string;
+  failed_count?: number;
+}
+
+export interface MonteCarloCaseDetail {
+  title: string;
+  overall_availability: number;
+  failed_count: number;
+  failed_sat_ids?: string[];
+  total_cost_usd: number;
+  remediation_cost: number;
+  remediation_plan: string;
+  raw_scenario?: any;
+  simulation_result?: any;
+  scenario_meta?: { id: string; title: string };
+  mc_failed_count?: number;
+}
+
+export interface MonteCarloParameters {
+  failure_probability: number;
+  emergency_launch_cost_usd: number;
+  launch_delay_days: number;
+  num_samples: number;
+  spare_satellites: number;
+  sla_penalty_per_client_usd?: number;
+}
+
+export interface MonteCarloSummary {
+  expected_availability: number;
+  worst_case_availability: number;
+  expected_risk_cost: number;
+  total_expected_cost: number;
+  sla_breach_probability: number;
+  critical_satellites: Array<{
+    satellite_id: string;
+    fail_count: number;
+    impact_score: number;
+  }>;
+  parameters: MonteCarloParameters;
+  best_case?: MonteCarloCaseDetail;
+  worst_case?: MonteCarloCaseDetail;
+}
+
+export interface MonteCarloData {
+  summary: MonteCarloSummary;
+  combinations: MonteCarloScenarioResult[];
 }
 
 export interface CriticalAlert {

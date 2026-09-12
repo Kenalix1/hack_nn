@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ScenarioData, SatelliteOutage, OutlinerSettings } from '../types';
 import { getDynamicSatelliteTelemetry } from '../utils/telemetry';
-import { Layers, Eye, EyeOff, ZoomIn, ZoomOut, RotateCcw, Globe, Map } from 'lucide-react';
 
 interface TwoDMapCanvasProps {
   scenario: ScenarioData | null;
@@ -551,58 +550,6 @@ export const TwoDMapCanvas: React.FC<TwoDMapCanvasProps> = ({
       overflow: 'hidden',
       userSelect: 'none'
     }}>
-      {/* 2D Map Control Bar - Positioned Top Right to leave GlobalSettingsMenu (top-left) free */}
-      <div style={{
-        position: 'absolute',
-        top: '16px',
-        right: '70px',
-        zIndex: 90,
-        backgroundColor: '#121722dd',
-        border: '1px solid #1e293b',
-        borderRadius: '8px',
-        padding: '6px 12px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '10px',
-        boxShadow: '0 6px 20px rgba(0,0,0,0.5)',
-        backdropFilter: 'blur(8px)',
-        fontSize: '12px',
-        color: '#f8fafc'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: '#38bdf8' }}>
-          <Map size={15} />
-          <span>2D Карта Группировки</span>
-        </div>
-
-        <div style={{ width: '1px', height: '16px', backgroundColor: '#333943' }} />
-
-        {/* Tile Style Selector */}
-        <button
-          onClick={() => setTileStyle(s => s === 'bw_dark' ? 'bw_light' : s === 'bw_light' ? 'standard' : 'bw_dark')}
-          style={ctrlBtnStyle(true)}
-          title="Переключить стилевой режим подложки карты"
-        >
-          <Globe size={13} />
-          <span>{tileStyle === 'bw_dark' ? 'Ч/Б Тёмный' : tileStyle === 'bw_light' ? 'Ч/Б Светлый' : 'Цветной'}</span>
-        </button>
-
-        <div style={{ width: '1px', height: '16px', backgroundColor: '#333943' }} />
-
-        {/* Zoom Controls */}
-        <button onClick={() => setZoom(z => Math.min(8.0, z + 0.5))} style={iconBtnStyle} title="Приблизить">
-          <ZoomIn size={14} />
-        </button>
-        <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#00ff88', fontWeight: 'bold' }}>
-          Z={zoom.toFixed(1)}
-        </span>
-        <button onClick={() => setZoom(z => Math.max(2.0, z - 0.5))} style={iconBtnStyle} title="Отдалить (Мин. Z=2.0)">
-          <ZoomOut size={14} />
-        </button>
-        <button onClick={() => { setZoom(2.0); setCenter({ lat: 60, lon: 60 }); }} style={iconBtnStyle} title="Сброс на Z=2.0">
-          <RotateCcw size={13} />
-        </button>
-      </div>
-
       {/* Main OSM Canvas */}
       <canvas
         ref={canvasRef}
@@ -638,7 +585,7 @@ export const TwoDMapCanvas: React.FC<TwoDMapCanvasProps> = ({
           color: '#ffffff'
         }}>
           <div style={{ fontWeight: 'bold', fontSize: '13px', color: '#00f0ff', marginBottom: '4px' }}>
-            🛰️ Спутник {selectedNode.id}
+            Спутник {selectedNode.id}
           </div>
           <div style={{ fontSize: '11px', color: '#ccc', display: 'flex', flexDirection: 'column', gap: '3px' }}>
             <div>Широта: <b>{selectedNode.lat.toFixed(2)}° N</b> | Долгота: <b>{selectedNode.lon.toFixed(2)}° E</b></div>
@@ -652,28 +599,3 @@ export const TwoDMapCanvas: React.FC<TwoDMapCanvasProps> = ({
   );
 };
 
-const ctrlBtnStyle = (active: boolean): React.CSSProperties => ({
-  backgroundColor: active ? '#1e293b' : '#121620',
-  color: active ? '#38bdf8' : '#64748b',
-  border: `1px solid ${active ? '#0284c7' : '#333943'}`,
-  borderRadius: '4px',
-  padding: '4px 8px',
-  fontSize: '11px',
-  cursor: 'pointer',
-  display: 'flex',
-  alignItems: 'center',
-  gap: '4px',
-  fontWeight: active ? 600 : 400
-});
-
-const iconBtnStyle: React.CSSProperties = {
-  backgroundColor: '#1e293b',
-  color: '#cbd5e1',
-  border: '1px solid #333943',
-  borderRadius: '4px',
-  padding: '4px 8px',
-  fontSize: '11px',
-  cursor: 'pointer',
-  display: 'flex',
-  alignItems: 'center'
-};

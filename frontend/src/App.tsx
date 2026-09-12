@@ -16,9 +16,10 @@ import { EmergencyModal } from './components/EmergencyModal';
 import { ScenariosModal } from './components/ScenariosModal';
 import { TwoDMapCanvas } from './components/TwoDMapCanvas';
 import { RecommendationsModal } from './components/RecommendationsModal';
-import { ScenarioData, OutlinerSettings, LogMessage, Satellite, SatelliteOutage } from './types';
+import { MonteCarloConfigModal } from './components/MonteCarloConfigModal';
+import { ScenarioData, OutlinerSettings, LogMessage, Satellite, SatelliteOutage, MonteCarloParameters } from './types';
 import { openPdfReport } from './utils/generatePdfReport';
-import { Eye, RotateCcw } from 'lucide-react';
+import { Eye, RotateCcw, Globe, Map, Activity } from 'lucide-react';
 
 const LOCAL_STORAGE_KEY = 'cosmo_app_saved_state_v2';
 
@@ -106,6 +107,29 @@ export const App: React.FC = () => {
     initialSaved?.currentTimeSeconds || 0
   );
   const [viewMode, setViewMode] = useState<'3d' | '2d'>('3d');
+  const [isMonteCarloModalOpen, setIsMonteCarloModalOpen] = useState<boolean>(false);
+  const [hasRunMonteCarlo, setHasRunMonteCarlo] = useState<boolean>(false);
+  const [monteCarloParams, setMonteCarloParams] = useState<MonteCarloParameters>({
+    failure_probability: 0.01,
+    emergency_launch_cost_usd: 15000000,
+    launch_delay_days: 14,
+    num_samples: 12,
+    spare_satellites: 2,
+    sla_penalty_per_client_usd: 120000
+  });
+
+  // Live Simulation / Monte Carlo Progress Tracking
+  const [simulationProgress, setSimulationProgress] = useState<{
+    active: boolean;
+    percent: number;
+    stage: string;
+    sampleCount?: number;
+  }>({
+    active: false,
+    percent: 0,
+    stage: ''
+  });
+  const progressIntervalRef = useRef<any>(null);
 
   // Focus & Outages State
   const [focusedSatelliteId, setFocusedSatelliteId] = useState<string | null>(null);
@@ -211,6 +235,7 @@ export const App: React.FC = () => {
   // Fetch Preset Scenario & Re-render Map
   const loadScenario = useCallback(async (scId: string) => {
     try {
+      setHasRunMonteCarlo(false);
       addLog(`Загрузка сценария: ${scId}`, 'info');
       const res = await fetch(`/api/simulate?scenario_id=${scId}`);
       if (res.ok) {
@@ -640,7 +665,15 @@ export const App: React.FC = () => {
       const res = await fetch('/api/simulate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scenario: baseScenario })
+        body: JSON.stringify({
+          scenario: baseScenario,
+          failure_probability: monteCarloParams.failure_probability,
+          emergency_launch_cost_usd: monteCarloParams.emergency_launch_cost_usd,
+          launch_delay_days: monteCarloParams.launch_delay_days,
+          num_samples: monteCarloParams.num_samples,
+          spare_satellites: monteCarloParams.spare_satellites,
+          sla_penalty_per_client_usd: monteCarloParams.sla_penalty_per_client_usd
+        })
       });
 
       if (res.ok) {
@@ -706,32 +739,171 @@ export const App: React.FC = () => {
       }));
       addLog(`Применена рекомендация: Выполнен фазовый сдвиг (+15°) для плоскости P1`, 'success');
     } else if (recType === 'reroute_isl') {
-      handleRunSimulation();
+      handleOpenSimulationConfig();
       addLog(`Применена рекомендация: Перестроена графовая маршрутизация ISL линий`, 'success');
     }
   };
 
-  // Run Simulation Button Handler
-  const handleRunSimulation = async () => {
-    if (currentRawScenario) {
-      await handleUploadScenarioJson(currentRawScenario);
-    } else {
-      setIsSimulating(true);
-      addLog(`Запуск полного математического моделирования...`, 'info');
-      try {
-        const res = await fetch(`/api/simulate?scenario_id=${activeScenarioId}`);
-        if (res.ok) {
-          const data = await res.json();
-          setScenarioData(data);
-          if (data.raw_scenario) setCurrentRawScenario(data.raw_scenario);
-          addLog(`Моделирование завершено: Общая доступность ${((data.simulation_result?.overall_availability || 0) * 100).toFixed(2)}%`, 'success');
-          openWindow('analytics');
+  // Open Monte Carlo Parameter Modal
+  const handleOpenSimulationConfig = () => {
+    setIsMonteCarloModalOpen(true);
+  };
+
+  const startProgressTracking = (sampleCount: number) => {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+    }
+    setSimulationProgress({
+      active: true,
+      percent: 8,
+      stage: '1/5. Инициализация орбитальной механики и эфемерид...',
+      sampleCount
+    });
+
+    const stages = [
+      { threshold: 22, text: '2/5. Расчет геометрической видимости станций и ISL хорд...' },
+      { threshold: 46, text: `3/5. Стохастическое сэмплирование Монте-Карло (N=${sampleCount})...` },
+      { threshold: 72, text: '4/5. Параллельная маршрутизация ISL и стресс-тестирование SLA...' },
+      { threshold: 88, text: '5/5. Оценка финансовых рисков, штрафов SLA и рекомендаций...' }
+    ];
+
+    progressIntervalRef.current = setInterval(() => {
+      setSimulationProgress(prev => {
+        if (!prev.active) return prev;
+        if (prev.percent >= 94) return prev;
+        const inc = Math.floor(Math.random() * 4) + 2;
+        const nextPercent = Math.min(prev.percent + inc, 94);
+        let nextStage = prev.stage;
+        for (const s of stages) {
+          if (nextPercent >= s.threshold) {
+            nextStage = s.text;
+          }
         }
-      } catch (e) {
+        return { ...prev, percent: nextPercent, stage: nextStage };
+      });
+    }, 110);
+  };
+
+  const completeProgressTracking = (success: boolean) => {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
+    if (success) {
+      setSimulationProgress(prev => ({
+        ...prev,
+        percent: 100,
+        stage: 'Вычисления успешно завершены (100%)'
+      }));
+      setTimeout(() => {
+        setSimulationProgress(prev => ({ ...prev, active: false }));
+      }, 550);
+    } else {
+      setSimulationProgress(prev => ({
+        ...prev,
+        stage: 'Ошибка при вычислении',
+        active: false
+      }));
+    }
+  };
+
+  // Run Monte Carlo Simulation with User Parameters
+  const handleExecuteMonteCarlo = async (params: MonteCarloParameters) => {
+    setMonteCarloParams(params);
+    setIsSimulating(true);
+    startProgressTracking(params.num_samples);
+    addLog(
+      `Запуск симуляции Монте-Карло: выборка N=${params.num_samples}, P_fail=${(params.failure_probability * 100).toFixed(1)}%, Пуск=$${(params.emergency_launch_cost_usd / 1e6).toFixed(0)}M, Задержка=${params.launch_delay_days}дн, Резерв=${params.spare_satellites}КА...`,
+      'info'
+    );
+
+    try {
+      const baseScenario = currentRawScenario ? JSON.parse(JSON.stringify(currentRawScenario)) : {
+        schema_version: 'cosmo-A-1.0',
+        meta: { id: activeScenarioId, title: scenarioData?.title || 'Сценарий' },
+        environment: {
+          altitude_km: 550.0,
+          inclination_deg: 87.0,
+          earth_angle0_deg: 12.0,
+          horizon_s: 86400,
+          step_s: 120,
+          min_elevation_deg: 10,
+          isl_range_km: 3000.0,
+          target_availability: 0.9
+        },
+        design: {
+          launch_stage: 3,
+          planes: [
+            { id: 'P1', raan_deg: 0, phase_deg: 0 },
+            { id: 'P2', raan_deg: 60, phase_deg: 15 },
+            { id: 'P3', raan_deg: 120, phase_deg: 30 },
+            { id: 'P4', raan_deg: 180, phase_deg: 45 },
+            { id: 'P5', raan_deg: 240, phase_deg: 60 },
+            { id: 'P6', raan_deg: 300, phase_deg: 75 }
+          ],
+          satellites: (scenarioData?.satellites || []).map(s => ({
+            id: s.id,
+            plane_id: `P${s.plane}`,
+            slot_deg: s.idx,
+            launch_batch: 1
+          }))
+        },
+        ground_sites: [
+          { id: 'C65', name: 'Центральный Шлюз C65', role: 'gateway', lat_deg: 55.75, lon_deg: 37.61 },
+          { id: 'C70', name: 'Шлюз C70', role: 'gateway', lat_deg: 59.93, lon_deg: 30.31 },
+          { id: 'Murmansk', name: 'Мурманск (Клиент)', role: 'client', lat_deg: 68.97, lon_deg: 33.08 },
+          { id: 'Pechora', name: 'Печора (Клиент)', role: 'client', lat_deg: 65.14, lon_deg: 57.22 }
+        ]
+      };
+
+      baseScenario.failures = currentOutages.map(o => ({
+        satellite_id: o.satellite_id,
+        start_s: o.start_s,
+        end_s: o.end_s
+      }));
+
+      const res = await fetch('/api/simulate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scenario: baseScenario,
+          failure_probability: params.failure_probability,
+          emergency_launch_cost_usd: params.emergency_launch_cost_usd,
+          launch_delay_days: params.launch_delay_days,
+          num_samples: params.num_samples,
+          spare_satellites: params.spare_satellites,
+          sla_penalty_per_client_usd: params.sla_penalty_per_client_usd
+        })
+      });
+
+      if (res.ok) {
+        completeProgressTracking(true);
+        setHasRunMonteCarlo(true);
+        const data = await res.json();
+        setScenarioData(data);
+        if (data.raw_scenario) setCurrentRawScenario(data.raw_scenario);
+        setIsMonteCarloModalOpen(false);
+
+        const mcSummary = data.simulation_result?.monte_carlo?.summary;
+        if (mcSummary) {
+          addLog(
+            `Монте-Карло расчет завершен: E[P_avail]=${(mcSummary.expected_availability * 100).toFixed(1)}%, Ожидаемый риск=$${(mcSummary.expected_risk_cost / 1e6).toFixed(2)}M, Худший случай=${(mcSummary.worst_case_availability * 100).toFixed(1)}%`,
+            'success'
+          );
+        } else {
+          addLog(`Моделирование завершено: Доступность ${((data.simulation_result?.overall_availability || 0) * 100).toFixed(2)}%`, 'success');
+        }
+        openWindow('analytics');
+      } else {
+        completeProgressTracking(false);
         addLog(`Ошибка при вычислении симуляции`, 'error');
-      } finally {
-        setIsSimulating(false);
       }
+    } catch (e) {
+      completeProgressTracking(false);
+      console.error(e);
+      addLog(`Ошибка при расчете симуляции Монте-Карло`, 'error');
+    } finally {
+      setIsSimulating(false);
     }
   };
 
@@ -772,7 +944,7 @@ export const App: React.FC = () => {
         scenarios={scenarios}
         activeScenario={activeScenarioId}
         onSelectScenario={(id) => setActiveScenarioId(id)}
-        onRunSimulation={handleRunSimulation}
+        onRunSimulation={handleOpenSimulationConfig}
         onOpenWindow={openWindow}
         onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
         onUploadScenarioJson={handleUploadScenarioJson}
@@ -792,6 +964,143 @@ export const App: React.FC = () => {
             settings={outlinerSettings}
             onChangeSettings={setOutlinerSettings}
           />
+
+          {/* Floating Simulation & Monte Carlo Progress HUD */}
+          {simulationProgress.active && (
+            <div
+              style={{
+                position: 'absolute',
+                top: '16px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 95,
+                backgroundColor: 'rgba(12, 16, 26, 0.94)',
+                backdropFilter: 'blur(12px)',
+                border: '1px solid rgba(56, 189, 248, 0.45)',
+                borderRadius: '12px',
+                padding: '12px 20px',
+                minWidth: '400px',
+                maxWidth: '560px',
+                boxShadow: '0 12px 36px rgba(0, 0, 0, 0.75), 0 0 25px rgba(56, 189, 248, 0.25)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+                pointerEvents: 'auto'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Activity size={16} className="animate-spin" style={{ color: '#38bdf8' }} />
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#f8fafc', letterSpacing: '0.3px' }}>
+                    Моделирование Монте-Карло
+                  </span>
+                  {simulationProgress.sampleCount && (
+                    <span style={{ fontSize: '10px', backgroundColor: '#0284c725', border: '1px solid #0284c7', color: '#38bdf8', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                      N={simulationProgress.sampleCount}
+                    </span>
+                  )}
+                </div>
+                <span style={{ fontSize: '14px', fontWeight: 800, color: '#38bdf8', fontFamily: 'monospace' }}>
+                  {simulationProgress.percent}%
+                </span>
+              </div>
+
+              {/* Progress Track */}
+              <div
+                style={{
+                  width: '100%',
+                  height: '6px',
+                  backgroundColor: 'rgba(30, 41, 59, 0.8)',
+                  borderRadius: '9999px',
+                  overflow: 'hidden',
+                  position: 'relative'
+                }}
+              >
+                <div
+                  style={{
+                    height: '100%',
+                    width: `${simulationProgress.percent}%`,
+                    background: 'linear-gradient(90deg, #0284c7, #38bdf8, #34d399)',
+                    borderRadius: '9999px',
+                    transition: 'width 0.2s ease-out',
+                    boxShadow: '0 0 10px rgba(56, 189, 248, 0.6)'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: '#94a3b8' }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {simulationProgress.stage}
+                </span>
+                <span style={{ fontSize: '10px', color: '#64748b', whiteSpace: 'nowrap', marginLeft: '8px' }}>
+                  Параллельные ядра
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Top-Right Corner: 3D / 2D Mode Switch */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '16px',
+              right: '16px',
+              zIndex: 86,
+              display: 'flex',
+              backgroundColor: 'rgba(17, 24, 39, 0.85)',
+              backdropFilter: 'blur(8px)',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              borderRadius: '8px',
+              padding: '3px',
+              gap: '3px',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.5)'
+            }}
+          >
+            <button
+              onClick={() => setViewMode('3d')}
+              style={{
+                height: '28px',
+                padding: '0 10px',
+                backgroundColor: viewMode === '3d' ? '#1473e6' : 'transparent',
+                color: viewMode === '3d' ? '#ffffff' : '#94a3b8',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                transition: 'all 0.15s ease'
+              }}
+              title="3D режим"
+            >
+              <Globe size={13} />
+              <span>3D</span>
+            </button>
+            <button
+              onClick={() => setViewMode('2d')}
+              style={{
+                height: '28px',
+                padding: '0 10px',
+                backgroundColor: viewMode === '2d' ? '#0284c7' : 'transparent',
+                color: viewMode === '2d' ? '#ffffff' : '#94a3b8',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                transition: 'all 0.15s ease'
+              }}
+              title="2D режим"
+            >
+              <Map size={13} />
+              <span>2D</span>
+            </button>
+          </div>
 
           {focusedSatelliteId && (
             <button
@@ -908,6 +1217,9 @@ export const App: React.FC = () => {
             onApplyRecommendation={handleApplyRecommendation}
             onExportResultsJson={handleExportResultsJson}
             onOpenPdfReport={() => openPdfReport(scenarioData)}
+            onVisualizeScenario={handleVisualizeScenario}
+            hasRunMonteCarlo={hasRunMonteCarlo}
+            onOpenSimulationConfig={handleOpenSimulationConfig}
           />
         </DraggableWindow>
 
@@ -1032,6 +1344,16 @@ export const App: React.FC = () => {
 
         {/* Event Log Panel */}
         <EventLogPanel logs={logs} />
+
+        {/* Monte Carlo Launch Config Modal */}
+        <MonteCarloConfigModal
+          isOpen={isMonteCarloModalOpen}
+          onClose={() => setIsMonteCarloModalOpen(false)}
+          onRunSimulation={handleExecuteMonteCarlo}
+          isSimulating={isSimulating}
+          initialParams={monteCarloParams}
+          simulationProgress={simulationProgress}
+        />
       </div>
     </div>
   );

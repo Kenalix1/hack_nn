@@ -12,7 +12,8 @@ import {
   Sparkles,
   Wand2,
   Check,
-  FileText
+  FileText,
+  Activity
 } from 'lucide-react';
 import { ScenarioData, SatelliteOutage, OutlinerSettings } from '../types';
 
@@ -36,6 +37,9 @@ export const RecommendationsModal: React.FC<RecommendationsModalProps> = ({
   onOpenPdfReport
 }) => {
   const [isOptimizedApplied, setIsOptimizedApplied] = useState(false);
+
+  const monteCarlo = scenario?.simulation_result?.monte_carlo;
+  const mcSummary = monteCarlo?.summary;
 
   // 1. Dynamic Keplerian & ISL Geometry Calculations
   const geometryMetrics = useMemo(() => {
@@ -479,9 +483,9 @@ export const RecommendationsModal: React.FC<RecommendationsModalProps> = ({
             </div>
             <div style={{ fontSize: '10px', marginTop: '2px' }}>
               {geometryMetrics.isChordBroken ? (
-                <span style={{ color: '#f87171' }}>🔴 Дефицит: -{geometryMetrics.deficitKm.toFixed(0)} км</span>
+                <span style={{ color: '#f87171' }}>Дефицит: -{geometryMetrics.deficitKm.toFixed(0)} км</span>
               ) : (
-                <span style={{ color: '#34d399' }}>🟢 Запас: +{geometryMetrics.marginKm.toFixed(0)} км</span>
+                <span style={{ color: '#34d399' }}>Запас: +{geometryMetrics.marginKm.toFixed(0)} км</span>
               )}
             </div>
           </div>
@@ -568,7 +572,7 @@ export const RecommendationsModal: React.FC<RecommendationsModalProps> = ({
               <span>
                 {autoOptimizationPlan?.isAlreadyOptimal
                   ? 'Группировка оптимальна'
-                  : '⚡ Применить оптимизацию'}
+                  : 'Применить оптимизацию'}
               </span>
             </button>
           </div>
@@ -618,6 +622,114 @@ export const RecommendationsModal: React.FC<RecommendationsModalProps> = ({
           </div>
         )}
       </div>
+
+      {/* 2.5 Monte Carlo Contingency & Resilience Recommendations */}
+      {mcSummary && (
+        <div style={{
+          backgroundColor: '#111622',
+          border: '1px solid rgba(56, 189, 248, 0.25)',
+          borderRadius: '12px',
+          padding: '16px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.25)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', borderBottom: '1px solid #1e293b', paddingBottom: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ padding: '8px', backgroundColor: 'rgba(56, 189, 248, 0.15)', border: '1px solid rgba(56, 189, 248, 0.4)', borderRadius: '8px', color: '#38bdf8' }}>
+                <Activity size={18} />
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <h3 style={{ margin: 0, fontSize: '13px', fontWeight: 800, textTransform: 'uppercase', color: '#ffffff' }}>
+                    Рекомендации по отказоустойчивости (Монте-Карло аудит)
+                  </h3>
+                  <span style={{ fontSize: '9px', fontFamily: 'monospace', backgroundColor: '#0284c730', color: '#38bdf8', padding: '1px 6px', borderRadius: '3px', border: '1px solid #0284c750' }}>
+                    Monte Carlo Resilience
+                  </span>
+                </div>
+                <p style={{ margin: '2px 0 0 0', fontSize: '11px', color: '#94a3b8' }}>
+                  Стратегия защиты бюджета и непрерывности SLA на основе вероятностного моделирования отказов ({mcSummary.parameters?.num_samples || 12} сценариев).
+                </p>
+              </div>
+            </div>
+
+            {/* Quick Metrics Badge */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontFamily: 'monospace', fontSize: '11px' }}>
+              <div style={{ backgroundColor: '#090d14', border: '1px solid #1e293b', padding: '4px 8px', borderRadius: '6px' }}>
+                <span style={{ color: '#94a3b8' }}>E[SLA]: </span>
+                <span style={{ color: mcSummary.expected_availability >= 90 ? '#34d399' : '#f87171', fontWeight: 800 }}>
+                  {mcSummary.expected_availability.toFixed(1)}%
+                </span>
+              </div>
+              <div style={{ backgroundColor: '#090d14', border: '1px solid #1e293b', padding: '4px 8px', borderRadius: '6px' }}>
+                <span style={{ color: '#94a3b8' }}>Мат. риск: </span>
+                <span style={{ color: '#fbbf24', fontWeight: 800 }}>
+                  ${(mcSummary.expected_risk_cost / 1e6).toFixed(2)}M
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* 3 Specific Actionable Recommendations */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
+            
+            {/* Rec 1: Orbital Spare Satellites Policy */}
+            <div style={{ backgroundColor: '#090d14', border: '1px solid #1e293b', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase' }}>
+                <ShieldAlert size={14} />
+                <span>1. Орбитальный горячий резерв (In-Orbit Spare)</span>
+              </div>
+              <div style={{ fontSize: '11px', color: '#cbd5e1', lineHeight: '1.5' }}>
+                {(mcSummary.parameters?.spare_satellites || 0) === 0 ? (
+                  <>
+                    В текущей модели <b style={{ color: '#f87171' }}>0 резервных КА на орбите</b>. При отказе аппарата задержка пуска составляет <b>{mcSummary.parameters?.launch_delay_days || 14} дней</b> со стоимостью <b>${((mcSummary.parameters?.emergency_launch_cost_usd || 15000000) / 1e6).toFixed(0)}M</b>. Рекомендуется включить в состав группировки 1–2 аппарата горячего резерва: это устраняет простой и экономит миллионы на штрафах.
+                  </>
+                ) : (
+                  <>
+                    На орбите развернуто <b style={{ color: '#34d399' }}>{mcSummary.parameters?.spare_satellites} резервных КА</b>. При единичном отказе время замещения составляет <b>0 дней</b>, предотвращая срыв SLA и устраняя необходимость экстренного пуска за <b>${((mcSummary.parameters?.emergency_launch_cost_usd || 15000000) / 1e6).toFixed(0)}M</b>.
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Rec 2: Autonomous Phasing vs Rocket Launch */}
+            <div style={{ backgroundColor: '#090d14', border: '1px solid #1e293b', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 700, color: '#34d399', textTransform: 'uppercase' }}>
+                <CheckCircle2 size={14} />
+                <span>2. Автономное ксеноновое фазирование</span>
+              </div>
+              <div style={{ fontSize: '11px', color: '#cbd5e1', lineHeight: '1.5' }}>
+                При выходе из строя спутника активируйте бортовую ЭРДУ (электрореактивные двигатели) соседних КА для закрытия фазового зазора за 48–72 ч. Это позволяет избежать внепланового пуска ракеты-носителя ($15M) и восстановить непрерывность ISL-хорды.
+              </div>
+            </div>
+
+            {/* Rec 3: Hardening Critical Nodes */}
+            <div style={{ backgroundColor: '#090d14', border: '1px solid #1e293b', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 700, color: '#fbbf24', textTransform: 'uppercase' }}>
+                <AlertTriangle size={14} />
+                <span>3. Защита критических спутников (SPOF)</span>
+              </div>
+              <div style={{ fontSize: '11px', color: '#cbd5e1', lineHeight: '1.5' }}>
+                {mcSummary.critical_satellites && mcSummary.critical_satellites.length > 0 ? (
+                  <>
+                    Наибольшее падение доступности вызывают отказы аппаратов:{' '}
+                    <b style={{ color: '#ffffff' }}>
+                      {mcSummary.critical_satellites.slice(0, 3).map(c => `${c.satellite_id} (влияние ${(c.impact_score * 100).toFixed(1)}%)`).join(', ')}
+                    </b>. Для этих позиций рекомендуется аппаратное дублирование бортовых транспондеров и межспутниковых лазерных терминалов.
+                  </>
+                ) : (
+                  <>
+                    Все спутники группировки взаимно резервируемы. Локальные единичные отказы компенсируются альтернативной маршрутизацией через смежные плоскости МИС.
+                  </>
+                )}
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* 3. 4 Analytical Columns */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '14px' }}>

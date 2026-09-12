@@ -352,45 +352,6 @@ export const Header: React.FC<HeaderProps> = ({
           {isSimulating ? <RotateCcw size={14} className="animate-spin" /> : <Play size={14} />}
           <span>{isSimulating ? 'Расчет...' : 'Запустить Симуляцию'}</span>
         </button>
-
-        {onToggleViewMode && (
-          <div style={{ display: 'flex', backgroundColor: '#1a1d24', border: '1px solid #333943', borderRadius: '6px', padding: '2px', marginLeft: '6px' }}>
-            <button
-              onClick={() => onToggleViewMode('3d')}
-              className="hdr-btn"
-              style={{
-                height: '28px',
-                padding: '0 10px',
-                backgroundColor: viewMode === '3d' ? '#1473e6' : 'transparent',
-                color: viewMode === '3d' ? '#ffffff' : '#94a3b8',
-                border: 'none',
-                borderRadius: '4px',
-                fontWeight: 600
-              }}
-              title="Переключить рабочую область на 3D Глобус"
-            >
-              <Globe size={13} />
-              <span>3D Глобус</span>
-            </button>
-            <button
-              onClick={() => onToggleViewMode('2d')}
-              className="hdr-btn"
-              style={{
-                height: '28px',
-                padding: '0 10px',
-                backgroundColor: viewMode === '2d' ? '#0284c7' : 'transparent',
-                color: viewMode === '2d' ? '#ffffff' : '#94a3b8',
-                border: 'none',
-                borderRadius: '4px',
-                fontWeight: 600
-              }}
-              title="Переключить рабочую область на 2D карту орбит"
-            >
-              <Map size={13} />
-              <span>2D Карта</span>
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Windows Shortcuts (Desktop) */}

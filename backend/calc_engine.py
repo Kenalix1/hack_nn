@@ -137,19 +137,11 @@ def run_simulation(scenario: dict, settings: dict = None) -> dict:
     
     satellite_usage_count = {}
     
-    # Run in parallel
-    with concurrent.futures.ProcessPoolExecutor() as executor:
-        futures = {
-            executor.submit(compute_step, scenario, t_s, min_elev, clients, gateway_ids): t_s
-            for t_s in time_steps
-        }
-        
-        results = []
-        for future in concurrent.futures.as_completed(futures):
-            results.append(future.result())
-            
-        # Sort results by time step to maintain chronological order
-        results.sort(key=lambda x: x['t_s'])
+    # Compute steps sequentially (optimized, avoids heavy process spawning overhead)
+    results = [
+        compute_step(scenario, t_s, min_elev, clients, gateway_ids)
+        for t_s in time_steps
+    ]
         
     for res in results:
         t_s = res['t_s']
@@ -290,7 +282,7 @@ def run_simulation(scenario: dict, settings: dict = None) -> dict:
                 'satellite_id': sid,
                 'type': 'overheat',
                 'severity': 'critical',
-                'title': f'🔥 Перегрев КА {sid}',
+                'title': f'Перегрев КА {sid}',
                 'message': f'Температура корпуса {temp_c}°C (критический предел ≥ 80°C) из-за утилизации ISL ({usage} трасс).'
             })
         elif temp_c >= 70.0:
@@ -298,7 +290,7 @@ def run_simulation(scenario: dict, settings: dict = None) -> dict:
                 'satellite_id': sid,
                 'type': 'overheat',
                 'severity': 'warning',
-                'title': f'⚠️ Повышенный нагрев КА {sid}',
+                'title': f'Повышенный нагрев КА {sid}',
                 'message': f'Температура корпуса {temp_c}°C (норма < 70°C).'
             })
 
@@ -307,7 +299,7 @@ def run_simulation(scenario: dict, settings: dict = None) -> dict:
                 'satellite_id': sid,
                 'type': 'low_fuel',
                 'severity': 'critical',
-                'title': f'⛽ Критический остаток топлива КА {sid}',
+                'title': f'Критический остаток топлива КА {sid}',
                 'message': f'Запас ксенона {fuel_remaining} кг ({fuel_pct}% <= 15%). Требуется оптимизация маневров.'
             })
         elif fuel_pct <= 25.0:
@@ -315,7 +307,7 @@ def run_simulation(scenario: dict, settings: dict = None) -> dict:
                 'satellite_id': sid,
                 'type': 'low_fuel',
                 'severity': 'warning',
-                'title': f'⚠️ Малый остаток топлива КА {sid}',
+                'title': f'Малый остаток топлива КА {sid}',
                 'message': f'Запас ксенона {fuel_remaining} кг ({fuel_pct}%).'
             })
 
@@ -345,13 +337,13 @@ def run_simulation(scenario: dict, settings: dict = None) -> dict:
     if overall_availability < 0.90 or unmet_clients_count > 0 or len(critical_alerts) > 0:
         saved_penalties = annual_sla_penalties if annual_sla_penalties > 0 else (sla_penalty_per_client * 2)
         economic_recommendations.append(
-            f"💰 [САМЫЙ ВЫГОДНЫЙ ВАРИАНТ]: Динамическая перенастройка сетки ISL и перефазирование орбит (+15°). Затраты: $50,000 (расход ксенона). Экономия: ${saved_penalties + 2600000:,.0f} за счет устранения штрафов SLA без покупки новых КА."
+            f"[САМЫЙ ВЫГОДНЫЙ ВАРИАНТ]: Динамическая перенастройка сетки ISL и перефазирование орбит (+15°). Затраты: $50,000 (расход ксенона). Экономия: ${saved_penalties + 2600000:,.0f} за счет устранения штрафов SLA без покупки новых КА."
         )
         
         overheated_count = len([s for s in sat_status_map.values() if s['overheated']])
         if overheated_count > 0:
             economic_recommendations.append(
-                f"🌱 [БЕСПЛАТНАЯ ОПТИМИЗАЦИЯ ($0)]: Программная балансировка трафика для {overheated_count} нагретых КА (T ≥ 80°C). Снижает износ ЭРДУ и экономит $450,000/год на ТО."
+                f"[БЕСПЛАТНАЯ ОПТИМИЗАЦИЯ ($0)]: Программная балансировка трафика для {overheated_count} нагретых КА (T ≥ 80°C). Снижает износ ЭРДУ и экономит $450,000/год на ТО."
             )
 
     return {

@@ -95,19 +95,30 @@ export function openPdfReport(scenario: ScenarioData | null): void {
     }
 
     @media print {
+      @page {
+        size: A4 portrait;
+        margin: 10mm 12mm;
+      }
+      body {
+        background: #ffffff !important;
+      }
       .no-print-bar {
         display: none !important;
       }
       .pdf-container {
         margin: 0 !important;
         max-width: 100% !important;
+        box-shadow: none !important;
       }
       .page {
         box-shadow: none !important;
         margin: 0 !important;
-        padding: 0 !important;
+        padding: 6mm 4mm !important;
         page-break-after: always;
-        height: 290mm;
+        page-break-inside: avoid;
+        height: auto !important;
+        min-height: 265mm !important;
+        border: none !important;
       }
       .page:last-child {
         page-break-after: avoid;
@@ -400,10 +411,10 @@ export function openPdfReport(scenario: ScenarioData | null): void {
 
   <div class="no-print-bar">
     <div style="font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px;">
-      <span>🛰️</span> Научно-Технический Отчет PDF | Орбитальная Группировка НИОКР-2026
+      Научно-Технический Отчет PDF | Орбитальная Группировка НИОКР-2026
     </div>
     <button class="no-print-btn" onclick="window.print()">
-      🖨️ Печать / Сохранить в PDF
+      Печать / Сохранить в PDF
     </button>
   </div>
 
@@ -414,7 +425,7 @@ export function openPdfReport(scenario: ScenarioData | null): void {
       <div>
         <div class="page-header">
           <div class="page-header-title">РАЗДЕЛ 1: СВОДНЫЙ АНАЛИЗ И SLA ДОСТУПНОСТЬ</div>
-          <div class="page-header-meta">Страница 1 из 4<br/>Дата: ${timestamp}</div>
+          <div class="page-header-meta"><span style="font-weight: 700; color: #0f172a; letter-spacing: 0.5px;">НИОКР-ОГ-2026/01</span><br/>${timestamp}</div>
         </div>
 
         <div class="doc-title-block">
@@ -549,7 +560,7 @@ export function openPdfReport(scenario: ScenarioData | null): void {
       <div class="page-footer">
         <span>Департамент Орбитальных Систем и Сетей Связи</span>
         <span>Конфиденциально — Для Внутреннего Использования</span>
-        <span>Стр. 1</span>
+        <span>Стандарт ГОСТ Р 53802-2010</span>
       </div>
     </div>
 
@@ -558,7 +569,7 @@ export function openPdfReport(scenario: ScenarioData | null): void {
       <div>
         <div class="page-header">
           <div class="page-header-title">РАЗДЕЛ 2: ФИЗИЧЕСКАЯ МОДЕЛЬ ЗАДЕРЖЕК RTT И ТРАФИК</div>
-          <div class="page-header-meta">Страница 2 из 4<br/>Дата: ${timestamp}</div>
+          <div class="page-header-meta"><span style="font-weight: 700; color: #0f172a; letter-spacing: 0.5px;">НИОКР-ОГ-2026/01</span><br/>${timestamp}</div>
         </div>
 
         <div class="alert-box">
@@ -662,7 +673,7 @@ export function openPdfReport(scenario: ScenarioData | null): void {
       <div class="page-footer">
         <span>Департамент Орбитальных Систем и Сетей Связи</span>
         <span>Конфиденциально — Для Внутреннего Использования</span>
-        <span>Стр. 2</span>
+        <span>Стандарт ГОСТ Р 53802-2010</span>
       </div>
     </div>
 
@@ -671,7 +682,7 @@ export function openPdfReport(scenario: ScenarioData | null): void {
       <div>
         <div class="page-header">
           <div class="page-header-title">РАЗДЕЛ 3: СТРЕСС-ТЕСТИРОВАНИЕ И CHAOS ENGINEERING</div>
-          <div class="page-header-meta">Страница 3 из 4<br/>Дата: ${timestamp}</div>
+          <div class="page-header-meta"><span style="font-weight: 700; color: #0f172a; letter-spacing: 0.5px;">НИОКР-ОГ-2026/01</span><br/>${timestamp}</div>
         </div>
 
         <div class="alert-box" style="background:#fff7ed; border-color:#fed7aa; border-left-color:#ea580c; color:#9a3412;">
@@ -773,7 +784,7 @@ export function openPdfReport(scenario: ScenarioData | null): void {
       <div class="page-footer">
         <span>Департамент Орбитальных Систем и Сетей Связи</span>
         <span>Конфиденциально — Для Внутреннего Использования</span>
-        <span>Стр. 3</span>
+        <span>Стандарт ГОСТ Р 53802-2010</span>
       </div>
     </div>
 
@@ -782,7 +793,7 @@ export function openPdfReport(scenario: ScenarioData | null): void {
       <div>
         <div class="page-header">
           <div class="page-header-title">РАЗДЕЛ 4: СРАВНИТЕЛЬНЫЙ АНАЛИЗ И ЗАКЛЮЧЕНИЕ</div>
-          <div class="page-header-meta">Страница 4 из 4<br/>Дата: ${timestamp}</div>
+          <div class="page-header-meta"><span style="font-weight: 700; color: #0f172a; letter-spacing: 0.5px;">НИОКР-ОГ-2026/01</span><br/>${timestamp}</div>
         </div>
 
         <div class="section-title">Сравнительный Бенчмарк Архитектур Орбитальных Группировок</div>
@@ -798,7 +809,7 @@ export function openPdfReport(scenario: ScenarioData | null): void {
           <tbody>
             <tr>
               <td><b>Число КА в группировке</b></td>
-              <td><b>48 КА</b></td>
+              <td><b>${totalSats} КА</b></td>
               <td>72 КА</td>
               <td>3 КА</td>
             </tr>
@@ -855,7 +866,7 @@ export function openPdfReport(scenario: ScenarioData | null): void {
       <div class="page-footer">
         <span>Департамент Орбитальных Систем и Сетей Связи</span>
         <span>Конфиденциально — Для Внутреннего Использования</span>
-        <span>Стр. 4</span>
+        <span>Стандарт ГОСТ Р 53802-2010</span>
       </div>
     </div>
 

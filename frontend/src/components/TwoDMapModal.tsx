@@ -563,7 +563,7 @@ export const TwoDMapModal: React.FC<TwoDMapModalProps> = ({
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
               <span style={{ fontWeight: 'bold', fontSize: '12px', color: '#00f0ff' }}>
-                {selectedNode.type === 'satellite' ? `🛰️ КА ${selectedNode.id}` : `📡 Шлюз ${selectedNode.id}`}
+                {selectedNode.type === 'satellite' ? `КА ${selectedNode.id}` : `Шлюз ${selectedNode.id}`}
               </span>
               <span style={{
                 fontSize: '10px',

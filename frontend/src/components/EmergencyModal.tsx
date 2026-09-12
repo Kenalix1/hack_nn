@@ -43,7 +43,7 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
       { satellite_id: 'S04', start_s: 0, end_s: 86400 }
     ];
     onApplyOutageBatch(flareOutages);
-    onAddLog('⚡ [Событие ЧС] Геомагнитная солнечная вспышка CME! Выведены из строя КА S01, S02, S03, S04 плоскости P1.', 'error');
+    onAddLog('[Событие ЧС] Геомагнитная солнечная вспышка CME! Выведены из строя КА S01, S02, S03, S04 плоскости P1.', 'error');
   };
 
   const handleSimulateGatewayOutage = () => {
@@ -54,7 +54,7 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
       { satellite_id: 'S17', start_s: 0, end_s: 86400 }
     ];
     onApplyOutageBatch(gwOutages);
-    onAddLog('📡 [Событие ЧС] Авария энергосети наземного хаба (Мурманск)! Отключен шлюзовой канал с S15, S16, S17.', 'error');
+    onAddLog('[Событие ЧС] Авария энергосети наземного хаба (Мурманск)! Отключен шлюзовой канал с S15, S16, S17.', 'error');
   };
 
   const handleSimulateDebrisStrike = () => {
@@ -66,7 +66,7 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
       { satellite_id: 'S12', start_s: 0, end_s: 86400 }
     ];
     onApplyOutageBatch(debrisOutages);
-    onAddLog('💥 [Событие ЧС] Попадание элементов космического мусора в сегменте плоскости P2 (S09-S12)! Разрыв межспутникового кольца ISL.', 'error');
+    onAddLog('[Событие ЧС] Попадание элементов космического мусора в сегменте плоскости P2 (S09-S12)! Разрыв межспутникового кольца ISL.', 'error');
   };
 
   const handleSimulateSurge = () => {
@@ -76,7 +76,7 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
       { satellite_id: 'S23', start_s: 0, end_s: 86400 }
     ];
     onApplyOutageBatch(surgeOutages);
-    onAddLog('🚑 [Событие ЧС] Спасательная операция в Арктике! Перегрузка трафика на узлах S22, S23.', 'warning');
+    onAddLog('[Событие ЧС] Спасательная операция в Арктике! Перегрузка трафика на узлах S22, S23.', 'warning');
   };
 
   const handleApplyEconomicGridReconfig = () => {
@@ -89,12 +89,12 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
       ...outlinerSettings,
       planePhaseMap: newPhaseMap
     });
-    onAddLog('💰 [Экономическая компенсация] Применена оптимальная перенастройка сетки орбит (изменение фазирования P1/P2 на +15°). Затраты: $50,000 ксенонового манёвра. Связность восстановлена, экономия $3.27M!', 'success');
+    onAddLog('[Экономическая компенсация] Применена оптимальная перенастройка сетки орбит (изменение фазирования P1/P2 на +15°). Затраты: $50,000 ксенонового манёвра. Связность восстановлена, экономия $3.27M!', 'success');
   };
 
   const handleApplySpareSatLaunch = () => {
     onClearOutages();
-    onAddLog('🚀 [Компенсация] Выведены 4 орторезервных аппарата из орбитального запаса. Затраты: $3,320,000. Штатная структура восстановлена 100%.', 'info');
+    onAddLog('[Компенсация] Выведены 4 орторезервных аппарата из орбитального запаса. Затраты: $3,320,000. Штатная структура восстановлена 100%.', 'info');
   };
 
   return (
@@ -179,7 +179,7 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: '#ff5555' }}>
                 <Zap size={14} />
-                <span>⚡ 1. Солнечная вспышка (CME)</span>
+                <span>1. Солнечная вспышка (CME)</span>
               </div>
               <div style={{ fontSize: '10px', color: '#888', marginTop: '4px' }}>
                 Единовременный отказ 4 КА в экваториальной плоскости (S01, S02, S03, S04).
@@ -201,7 +201,7 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: '#ffaa00' }}>
                 <Radio size={14} />
-                <span>📡 2. Отказ наземного шлюза</span>
+                <span>2. Отказ наземного шлюза</span>
               </div>
               <div style={{ fontSize: '10px', color: '#888', marginTop: '4px' }}>
                 Авария энергоснабжения Мурманского шлюза. Потеря фидерных линий S15-S17.
@@ -223,7 +223,7 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: '#ff3b30' }}>
                 <Trash2 size={14} />
-                <span>💥 3. Каскад космического мусора</span>
+                <span>3. Каскад космического мусора</span>
               </div>
               <div style={{ fontSize: '10px', color: '#888', marginTop: '4px' }}>
                 Удар фрагментом мусора в районе плоскости P2. Разрыв кольца ISL (S09-S12).
@@ -245,7 +245,7 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: '#38bdf8' }}>
                 <Activity size={14} />
-                <span>🚑 4. Спасательная операция ЧС</span>
+                <span>4. Спасательная операция ЧС</span>
               </div>
               <div style={{ fontSize: '10px', color: '#888', marginTop: '4px' }}>
                 500% всплеск нагрузки в арктической зоне. Перегрузка задержки на узлах S22, S23.
@@ -282,9 +282,9 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
                       offlineGateways: nextMap
                     });
                     if (!isOffline) {
-                      onAddLog(`📡 [Событие ЧС] Авария наземного шлюзового узла ${gw.name} (${gw.id})! Станция отключена.`, 'error');
+                      onAddLog(`[Событие ЧС] Авария наземного шлюзового узла ${gw.name} (${gw.id})! Станция отключена.`, 'error');
                     } else {
-                      onAddLog(`📡 [Восстановление] Шлюзовой узел ${gw.name} (${gw.id}) восстановлен и вернулся в строй.`, 'success');
+                      onAddLog(`[Восстановление] Шлюзовой узел ${gw.name} (${gw.id}) восстановлен и вернулся в строй.`, 'success');
                     }
                   }}
                   style={{

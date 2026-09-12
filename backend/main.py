@@ -59,7 +59,14 @@ def load_preset_scenarios() -> Dict[str, dict]:
 PRESETS = load_preset_scenarios()
 
 class SimulateRequest(BaseModel):
-    scenario: Dict[str, Any]
+    scenario: Optional[Dict[str, Any]] = None
+    scenario_id: Optional[str] = None
+    failure_probability: Optional[float] = None
+    emergency_launch_cost_usd: Optional[float] = None
+    launch_delay_days: Optional[int] = None
+    num_samples: Optional[int] = None
+    spare_satellites: Optional[int] = None
+    sla_penalty_per_client_usd: Optional[float] = None
     
 class CompareRequest(BaseModel):
     scenarios: List[Dict[str, Any]]
@@ -163,17 +170,60 @@ def export_preset_result(filename: str, db: Session = Depends(get_db)):
 def simulate(req: SimulateRequest, db: Session = Depends(get_db)):
     try:
         scenario = req.scenario
+        if not scenario and req.scenario_id:
+            clean_id = req.scenario_id.replace('.json', '')
+            for k, sc in PRESETS.items():
+                if k == req.scenario_id or k.replace('.json', '') == clean_id:
+                    scenario = sc
+                    break
+        if not scenario and PRESETS:
+            scenario = list(PRESETS.values())[0]
+            
+        if not scenario:
+            raise HTTPException(status_code=400, detail="Scenario could not be resolved.")
+            
         geometry.validate(scenario)
         
         settings_db = crud.get_settings(db)
+        
+        # Monte Carlo & simulation settings
+        p_fail = req.failure_probability if req.failure_probability is not None else (settings_db.failure_probability or 0.01)
+        launch_cost = req.emergency_launch_cost_usd if req.emergency_launch_cost_usd is not None else (settings_db.emergency_launch_cost_usd or 15000000.0)
+        launch_delay = req.launch_delay_days if req.launch_delay_days is not None else (settings_db.launch_delay_days or 14)
+        num_samples = req.num_samples if req.num_samples is not None else 12
+        spare_sats = req.spare_satellites if req.spare_satellites is not None else 2
+        sla_penalty = req.sla_penalty_per_client_usd if req.sla_penalty_per_client_usd is not None else settings_db.sla_penalty_per_client_usd
+        
         settings_dict = {
             'unit_capex_usd': settings_db.unit_capex_usd,
             'annual_opex_per_sat_usd': settings_db.annual_opex_per_sat_usd,
-            'sla_penalty_per_client_usd': settings_db.sla_penalty_per_client_usd,
+            'sla_penalty_per_client_usd': sla_penalty,
             'processing_delay_ms': settings_db.processing_delay_ms,
+            'failure_probability': p_fail,
+            'emergency_launch_cost_usd': launch_cost,
+            'launch_delay_days': launch_delay,
+            'num_samples': num_samples,
+            'spare_satellites': spare_sats
         }
         
         result = run_simulation(scenario, settings_dict)
+        
+        # Run integrated Monte Carlo analysis
+        mc_analysis = analyze_combinations(scenario, settings_dict)
+        result["monte_carlo"] = mc_analysis
+        
+        # Enrich economic recommendations with Monte Carlo risk findings
+        mc_summary = mc_analysis.get("summary", {})
+        if mc_summary.get("expected_risk_cost", 0) > 0:
+            exp_risk_m = mc_summary["expected_risk_cost"] / 1e6
+            result["economic_analysis"]["economic_recommendations"].insert(0,
+                f"[МОНТЕ-КАРЛО СТРЕСС-ТЕСТ]: Ожидаемый финансовый риск аварий: ${exp_risk_m:.2f}M/год (при суточном P_fail={p_fail*100:.1f}%, цене пуска ${launch_cost/1e6:.1f}M и задержке {launch_delay} дн)."
+            )
+        if spare_sats > 0:
+            result["economic_analysis"]["economic_recommendations"].append(
+                f"[ОРБИТАЛЬНЫЙ РЕЗЕРВ ({spare_sats} КА)]: Позволяет мгновенно парировать единичные отказы без задержки в {launch_delay} дней и экономит до ${launch_cost/1e6:.1f}M на каждом предотвращенном пуске."
+            )
+            
         title = scenario.get("meta", {}).get("title", "Пользовательский Сценарий")
         scenario_id = scenario.get("meta", {}).get("id", title.replace(" ", "_").lower())
         
@@ -294,7 +344,16 @@ def simulate(req: SimulateRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=f"Simulation error: {str(e)}")
 
 @app.get("/api/simulate")
-def simulate_get(scenario_id: str = "01_full_constellation", db: Session = Depends(get_db)):
+def simulate_get(
+    scenario_id: str = "01_full_constellation",
+    failure_probability: Optional[float] = None,
+    emergency_launch_cost_usd: Optional[float] = None,
+    launch_delay_days: Optional[int] = None,
+    num_samples: Optional[int] = None,
+    spare_satellites: Optional[int] = None,
+    sla_penalty_per_client_usd: Optional[float] = None,
+    db: Session = Depends(get_db)
+):
     # This acts as a wrapper around the POST request for testing via browser
     matched_key = None
     for key in PRESETS.keys():
@@ -312,7 +371,15 @@ def simulate_get(scenario_id: str = "01_full_constellation", db: Session = Depen
     else:
         scenario = PRESETS[matched_key]
         
-    return simulate(SimulateRequest(scenario=scenario), db)
+    return simulate(SimulateRequest(
+        scenario=scenario,
+        failure_probability=failure_probability,
+        emergency_launch_cost_usd=emergency_launch_cost_usd,
+        launch_delay_days=launch_delay_days,
+        num_samples=num_samples,
+        spare_satellites=spare_satellites,
+        sla_penalty_per_client_usd=sla_penalty_per_client_usd
+    ), db)
 
 @app.post("/api/compare")
 def compare_scenarios(req: CompareRequest, db: Session = Depends(get_db)):
@@ -326,12 +393,18 @@ def compare_scenarios(req: CompareRequest, db: Session = Depends(get_db)):
             'annual_opex_per_sat_usd': settings_db.annual_opex_per_sat_usd,
             'sla_penalty_per_client_usd': settings_db.sla_penalty_per_client_usd,
             'processing_delay_ms': settings_db.processing_delay_ms,
+            'failure_probability': settings_db.failure_probability or 0.01,
+            'emergency_launch_cost_usd': settings_db.emergency_launch_cost_usd or 15000000.0,
+            'launch_delay_days': settings_db.launch_delay_days or 14,
+            'num_samples': 10,
+            'spare_satellites': 2
         }
         
         results = []
         for i, sc in enumerate(req.scenarios):
             geometry.validate(sc)
             res = run_simulation(sc, settings_dict)
+            mc_res = analyze_combinations(sc, settings_dict)
             results.append({
                 "index": i,
                 "meta": sc.get("meta", {"id": f"var_{i+1}", "title": f"Вариант {i+1}"}),
@@ -341,7 +414,8 @@ def compare_scenarios(req: CompareRequest, db: Session = Depends(get_db)):
                 "all_targets_met": res["all_targets_met"],
                 "client_summaries": res["client_summaries"],
                 "vulnerability": res["vulnerability"],
-                "economic_analysis": res["economic_analysis"]
+                "economic_analysis": res["economic_analysis"],
+                "monte_carlo": mc_res
             })
             
         best_variant = max(results, key=lambda x: x["overall_availability"])
@@ -349,7 +423,7 @@ def compare_scenarios(req: CompareRequest, db: Session = Depends(get_db)):
         
         if best_variant["all_targets_met"]:
             recommendations.append(
-                f"Рекомендуется конфигурация '{best_variant['meta'].get('title')}', так как она обеспечивают целевую доступность ≥ 90% для всех наземных пунктов."
+                f"Рекомендуется конфигурация '{best_variant['meta'].get('title')}', так как она обеспечивает целевую доступность ≥ 90% для всех наземных пунктов."
             )
         else:
             recommendations.append(
@@ -366,9 +440,12 @@ def compare_scenarios(req: CompareRequest, db: Session = Depends(get_db)):
 
 class AnalyzeRequest(BaseModel):
     scenario: dict
-    failure_probability: float = 0.01
-    emergency_launch_cost_usd: float = 15000000.0
-    launch_delay_days: int = 14
+    failure_probability: Optional[float] = 0.01
+    emergency_launch_cost_usd: Optional[float] = 15000000.0
+    launch_delay_days: Optional[int] = 14
+    num_samples: Optional[int] = 12
+    spare_satellites: Optional[int] = 2
+    sla_penalty_per_client_usd: Optional[float] = 120000.0
 
 @app.post("/api/analyze_combinations")
 def api_analyze_combinations(req: AnalyzeRequest, db: Session = Depends(get_db)):
@@ -380,15 +457,20 @@ def api_analyze_combinations(req: AnalyzeRequest, db: Session = Depends(get_db))
         settings_dict = {
             'unit_capex_usd': settings_db.unit_capex_usd,
             'annual_opex_per_sat_usd': settings_db.annual_opex_per_sat_usd,
-            'sla_penalty_per_client_usd': settings_db.sla_penalty_per_client_usd,
+            'sla_penalty_per_client_usd': req.sla_penalty_per_client_usd or settings_db.sla_penalty_per_client_usd,
             'processing_delay_ms': settings_db.processing_delay_ms,
-            'failure_probability': req.failure_probability,
-            'emergency_launch_cost_usd': req.emergency_launch_cost_usd,
-            'launch_delay_days': req.launch_delay_days,
+            'failure_probability': req.failure_probability if req.failure_probability is not None else 0.01,
+            'emergency_launch_cost_usd': req.emergency_launch_cost_usd if req.emergency_launch_cost_usd is not None else 15000000.0,
+            'launch_delay_days': req.launch_delay_days if req.launch_delay_days is not None else 14,
+            'num_samples': req.num_samples if req.num_samples is not None else 12,
+            'spare_satellites': req.spare_satellites if req.spare_satellites is not None else 2
         }
         
         results = analyze_combinations(scenario, settings_dict)
-        return {"combinations": results}
+        return {
+            "summary": results.get("summary", {}),
+            "combinations": results.get("combinations", [])
+        }
     except Exception as e:
         import traceback
         traceback.print_exc()

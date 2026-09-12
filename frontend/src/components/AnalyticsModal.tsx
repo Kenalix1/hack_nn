@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { BarChart2, Activity, ShieldCheck, Zap, Server, AlertTriangle, CheckCircle2, XCircle, DollarSign, Flame, Fuel, ArrowRight, Clock, Globe, Layers, Download, FileText } from 'lucide-react';
 import { ScenarioData, SatelliteOutage } from '../types';
 import { getDynamicSatelliteTelemetry } from '../utils/telemetry';
@@ -10,6 +10,9 @@ interface AnalyticsModalProps {
   onApplyRecommendation?: (recType: string) => void;
   onExportResultsJson?: () => void;
   onOpenPdfReport?: () => void;
+  onVisualizeScenario?: (scenarioJson: any, simResult: any) => void;
+  hasRunMonteCarlo?: boolean;
+  onOpenSimulationConfig?: () => void;
 }
 
 export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
@@ -18,14 +21,123 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
   currentTime = 0,
   onApplyRecommendation,
   onExportResultsJson,
-  onOpenPdfReport
+  onOpenPdfReport,
+  onVisualizeScenario,
+  hasRunMonteCarlo = false,
+  onOpenSimulationConfig
 }) => {
-  const [activeTab, setActiveTab] = useState<'metrics' | 'clients' | 'gantt' | 'coverage' | 'vulnerability' | 'routes' | 'economic'>('metrics');
+  const [activeTab, setActiveTab] = useState<'metrics' | 'montecarlo' | 'clients' | 'gantt' | 'coverage' | 'vulnerability' | 'routes' | 'economic'>('metrics');
   const [dismissedEconRecs, setDismissedEconRecs] = useState<Set<number>>(new Set());
   const [selectedRocket, setSelectedRocket] = useState<'soyuz' | 'angara' | 'falcon'>('soyuz');
+  const [mcFilter, setMcFilter] = useState<'all' | 'worst' | 'best'>('all');
 
   if (!scenario) {
     return <div style={{ padding: '20px', color: '#888' }}>Загрузка данных математического моделирования...</div>;
+  }
+
+  const monteCarlo = scenario.simulation_result?.monte_carlo;
+  const mcSummary = monteCarlo?.summary;
+
+  // Block analytics display until Monte Carlo simulation has run
+  if (!hasRunMonteCarlo || !monteCarlo || !mcSummary) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '440px',
+          padding: '40px 24px',
+          textAlign: 'center',
+          backgroundColor: '#070a10',
+          color: '#ffffff',
+          borderRadius: '12px'
+        }}
+      >
+        <div
+          style={{
+            backgroundColor: 'rgba(2, 132, 199, 0.1)',
+            border: '1px solid rgba(56, 189, 248, 0.3)',
+            padding: '18px',
+            borderRadius: '50%',
+            marginBottom: '18px',
+            boxShadow: '0 0 35px rgba(2, 132, 199, 0.25)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+        >
+          <Activity size={46} style={{ color: '#38bdf8' }} />
+        </div>
+
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            backgroundColor: '#1e293b',
+            padding: '4px 12px',
+            borderRadius: '9999px',
+            marginBottom: '14px',
+            border: '1px solid #334155'
+          }}
+        >
+          <AlertTriangle size={14} style={{ color: '#f59e0b' }} />
+          <span style={{ fontSize: '12px', fontWeight: 600, color: '#fcd34d' }}>
+            Аналитика заблокирована
+          </span>
+        </div>
+
+        <h2 style={{ fontSize: '20px', fontWeight: 800, margin: '0 0 10px 0', color: '#f8fafc' }}>
+          Требуется запуск расчета Монте-Карло
+        </h2>
+
+        <p style={{ maxWidth: '520px', fontSize: '13px', color: '#94a3b8', lineHeight: 1.6, margin: '0 0 24px 0' }}>
+          Аналитические графики доступности, метрики надежности SLA, финансовые риски и рекомендации формируются на основе стохастического моделирования Монте-Карло. До завершения расчета аналитические данные не отображаются.
+        </p>
+
+        {onOpenSimulationConfig && (
+          <button
+            onClick={onOpenSimulationConfig}
+            style={{
+              backgroundColor: '#0284c7',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '12px 28px',
+              fontSize: '14px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              boxShadow: '0 0 20px rgba(2, 132, 199, 0.45)',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            <Activity size={18} />
+            <span>Запустить симуляцию & Монте-Карло</span>
+          </button>
+        )}
+
+        {/* Feature Preview Cards */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', maxWidth: '640px', marginTop: '32px', textAlign: 'left' }}>
+          <div style={{ backgroundColor: '#0c101a', border: '1px solid #1e293b', borderRadius: '8px', padding: '12px' }}>
+            <div style={{ fontSize: '11px', color: '#38bdf8', fontWeight: 700, marginBottom: '4px' }}>Стресс-тестирование</div>
+            <div style={{ fontSize: '11px', color: '#64748b' }}>Анализ до 500 сценариев случайных и каскадных отказов спутников</div>
+          </div>
+          <div style={{ backgroundColor: '#0c101a', border: '1px solid #1e293b', borderRadius: '8px', padding: '12px' }}>
+            <div style={{ fontSize: '11px', color: '#34d399', fontWeight: 700, marginBottom: '4px' }}>Лучший и худший исход</div>
+            <div style={{ fontSize: '11px', color: '#64748b' }}>Оценка граничных случаев и экстремальных просадок связи</div>
+          </div>
+          <div style={{ backgroundColor: '#0c101a', border: '1px solid #1e293b', borderRadius: '8px', padding: '12px' }}>
+            <div style={{ fontSize: '11px', color: '#f87171', fontWeight: 700, marginBottom: '4px' }}>Оценка рисков SLA</div>
+            <div style={{ fontSize: '11px', color: '#64748b' }}>Расчет финансовых потерь и затрат на экстренные пуски</div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const offlineSet = new Set(outages.map(o => o.satellite_id));
@@ -69,6 +181,36 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
     return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
+  // Monte Carlo stress-test data extraction
+  const mcCombinations = monteCarlo?.combinations || [];
+  const mcParams = mcSummary?.parameters;
+  const expAvailPct = mcSummary ? (mcSummary.expected_availability * 100).toFixed(2) : overallAvailStr;
+  const worstAvailPct = mcSummary ? (mcSummary.worst_case_availability * 100).toFixed(1) : overallAvailStr;
+  const expRiskCostM = mcSummary ? (mcSummary.expected_risk_cost / 1e6).toFixed(2) : '0.00';
+  const slaBreachProbPct = mcSummary ? (mcSummary.sla_breach_probability * 100).toFixed(1) : '0.0';
+
+  const bestCase = useMemo(() => {
+    if (mcSummary?.best_case) return mcSummary.best_case;
+    if (mcCombinations.length === 0) return null;
+    return [...mcCombinations].sort((a, b) => b.overall_availability - a.overall_availability)[0];
+  }, [mcSummary, mcCombinations]);
+
+  const worstCase = useMemo(() => {
+    if (mcSummary?.worst_case) return mcSummary.worst_case;
+    if (mcCombinations.length === 0) return null;
+    return [...mcCombinations].sort((a, b) => a.overall_availability - b.overall_availability)[0];
+  }, [mcSummary, mcCombinations]);
+
+  const filteredMcCombinations = useMemo(() => {
+    if (mcFilter === 'worst') {
+      return [...mcCombinations].sort((a, b) => a.overall_availability - b.overall_availability);
+    }
+    if (mcFilter === 'best') {
+      return [...mcCombinations].sort((a, b) => b.overall_availability - a.overall_availability);
+    }
+    return mcCombinations;
+  }, [mcCombinations, mcFilter]);
+
   return (
     <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', height: '100%', overflowY: 'auto' }}>
       {/* Real-Time Live Ticker Header */}
@@ -99,7 +241,7 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
                 color: '#38bdf8',
                 border: '1px solid #0284c7',
                 borderRadius: '4px',
-                padding: '3px 8px',
+                padding: '4px 10px',
                 fontSize: '11px',
                 fontWeight: 600,
                 cursor: 'pointer',
@@ -107,10 +249,10 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
                 alignItems: 'center',
                 gap: '5px'
               }}
-              title="Сгенерировать 4-страничный научно-технический PDF отчёт"
+              title="Экспорт официального отчета НИОКР в PDF (ГОСТ Р 53802-2010)"
             >
               <FileText size={13} />
-              <span>Отчёт PDF</span>
+              <span>Экспорт PDF</span>
             </button>
           )}
 
@@ -118,13 +260,13 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
             <button
               onClick={onExportResultsJson}
               style={{
-                backgroundColor: '#20242b',
-                color: '#38bdf8',
-                border: '1px solid #333943',
+                backgroundColor: '#1e293b',
+                color: '#cbd5e1',
+                border: '1px solid #334155',
                 borderRadius: '4px',
-                padding: '3px 8px',
+                padding: '4px 10px',
                 fontSize: '11px',
-                fontWeight: 500,
+                fontWeight: 600,
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -139,11 +281,75 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
         </div>
       </div>
 
+      {/* Monte Carlo Summary Ticker Strip */}
+      {mcSummary && (
+        <div style={{
+          backgroundColor: '#0c101a',
+          border: '1px solid #0284c750',
+          borderRadius: '8px',
+          padding: '10px 14px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '10px',
+          fontFamily: 'monospace'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Activity size={16} style={{ color: '#38bdf8' }} />
+            <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: '#ffffff' }}>
+              Монте-Карло:
+            </span>
+            <span style={{ fontSize: '11px', color: '#38bdf8', fontWeight: 700 }}>
+              E[P_avail] = {expAvailPct}% (Худший: {worstAvailPct}%)
+            </span>
+            <span style={{ fontSize: '11px', color: '#475569' }}>|</span>
+            <span style={{ fontSize: '11px', color: '#fbbf24', fontWeight: 700 }}>
+              Ожидаемый риск: ${expRiskCostM}M
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '10px', color: '#94a3b8' }}>
+            <span style={{ backgroundColor: '#111726', padding: '2px 6px', borderRadius: '4px', border: '1px solid #1e293b' }}>
+              P_fail: {((mcParams?.failure_probability ?? 0.01) * 100).toFixed(1)}%/сут
+            </span>
+            <span style={{ backgroundColor: '#111726', padding: '2px 6px', borderRadius: '4px', border: '1px solid #1e293b' }}>
+              Пуск: ${((mcParams?.emergency_launch_cost_usd ?? 15000000) / 1e6).toFixed(0)}M
+            </span>
+            <span style={{ backgroundColor: '#111726', padding: '2px 6px', borderRadius: '4px', border: '1px solid #1e293b' }}>
+              Задержка: {mcParams?.launch_delay_days ?? 14}дн
+            </span>
+            <span style={{ backgroundColor: '#111726', padding: '2px 6px', borderRadius: '4px', border: '1px solid #1e293b' }}>
+              Резерв: {mcParams?.spare_satellites ?? 2} КА
+            </span>
+            <button
+              onClick={() => setActiveTab('montecarlo')}
+              style={{
+                backgroundColor: activeTab === 'montecarlo' ? '#0284c7' : '#1e293b',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '4px',
+                padding: '3px 8px',
+                fontSize: '10px',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              Подробнее →
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Tab Navigation */}
       <div style={{ display: 'flex', gap: '6px', borderBottom: '1px solid #383838', paddingBottom: '8px', flexWrap: 'wrap' }}>
         <button onClick={() => setActiveTab('metrics')} style={tabButtonStyle(activeTab === 'metrics')}>
           <Activity size={14} />
           <span>Сводные Метрики</span>
+        </button>
+        <button onClick={() => setActiveTab('montecarlo')} style={tabButtonStyle(activeTab === 'montecarlo')}>
+          <Activity size={14} style={{ color: '#38bdf8' }} />
+          <span>Монте-Карло & Риски</span>
         </button>
         <button onClick={() => setActiveTab('clients')} style={tabButtonStyle(activeTab === 'clients')}>
           <ShieldCheck size={14} />
@@ -218,6 +424,381 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Tab: Monte Carlo & Risk Stress Testing */}
+      {activeTab === 'montecarlo' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          
+          {/* 4 Monte Carlo KPI Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+            <MetricCard
+              icon={<ShieldCheck color={parseFloat(expAvailPct) >= 90 ? '#00ff88' : '#ff3b30'} size={20} />}
+              title="Ожидаемая доступность E[P]"
+              value={`${expAvailPct}%`}
+              sub={parseFloat(expAvailPct) >= 90 ? "Целевой норматив SLA ≥ 90% выдержан" : "[ВНИМАНИЕ] Риск нарушения SLA при отказах"}
+            />
+            <MetricCard
+              icon={<AlertTriangle color={parseFloat(worstAvailPct) >= 90 ? '#00ff88' : '#ffaa00'} size={20} />}
+              title="Худший сценарий (Worst-Case)"
+              value={`${worstAvailPct}%`}
+              sub="При множественных отказах сегмента"
+            />
+            <MetricCard
+              icon={<DollarSign color="#ffaa00" size={20} />}
+              title="Ожидаемый финансовый риск"
+              value={`$${expRiskCostM}M`}
+              sub="Матожидание затрат на пуски и штрафы"
+            />
+            <MetricCard
+              icon={<Activity color="#1473e6" size={20} />}
+              title="Вероятность срыва SLA"
+              value={`${slaBreachProbPct}%`}
+              sub={`Выборка: ${mcCombinations.length} сценариев испытания`}
+            />
+          </div>
+
+          {/* Active Monte Carlo Parameters Banner */}
+          <div style={panelStyle}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
+              <h4 style={{ ...panelHeaderStyle, margin: 0 }}>Примененные параметры симуляции Монте-Карло</h4>
+              <span style={{ fontSize: '11px', color: '#94a3b8', fontFamily: 'monospace' }}>Модель: Биномиальное распределение + Пуассон</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', fontFamily: 'monospace', fontSize: '11px' }}>
+              <div style={breakdownCardStyle}>
+                <span style={{ fontSize: '10px', color: '#94a3b8' }}>Ежедневная вероятность отказа 1 КА</span>
+                <span style={{ fontSize: '15px', fontWeight: 800, color: '#38bdf8' }}>{((mcParams?.failure_probability ?? 0.01) * 100).toFixed(1)}%</span>
+                <span style={{ fontSize: '9px', color: '#64748b' }}>P_fail в сутки</span>
+              </div>
+              <div style={breakdownCardStyle}>
+                <span style={{ fontSize: '10px', color: '#94a3b8' }}>Стоимость экстренного пуска</span>
+                <span style={{ fontSize: '15px', fontWeight: 800, color: '#34d399' }}>${((mcParams?.emergency_launch_cost_usd ?? 15000000) / 1e6).toFixed(0)}M</span>
+                <span style={{ fontSize: '9px', color: '#64748b' }}>Ракета-носитель среднего класса</span>
+              </div>
+              <div style={breakdownCardStyle}>
+                <span style={{ fontSize: '10px', color: '#94a3b8' }}>Задержка подготовки пуска</span>
+                <span style={{ fontSize: '15px', fontWeight: 800, color: '#fbbf24' }}>{mcParams?.launch_delay_days ?? 14} дней</span>
+                <span style={{ fontSize: '9px', color: '#64748b' }}>Период накопления штрафов</span>
+              </div>
+              <div style={breakdownCardStyle}>
+                <span style={{ fontSize: '10px', color: '#94a3b8' }}>Орбитальный резерв (Spares)</span>
+                <span style={{ fontSize: '15px', fontWeight: 800, color: '#a78bfa' }}>{mcParams?.spare_satellites ?? 2} КА</span>
+                <span style={{ fontSize: '9px', color: '#64748b' }}>Мгновенное парирование</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Critical Satellites from Monte Carlo */}
+          {mcSummary?.critical_satellites && mcSummary.critical_satellites.length > 0 && (
+            <div style={panelStyle}>
+              <h4 style={panelHeaderStyle}>Критические КА по результатам стресс-теста Монте-Карло</h4>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '8px', marginTop: '8px', fontFamily: 'monospace' }}>
+                {mcSummary.critical_satellites.slice(0, 8).map(cs => (
+                  <div key={cs.satellite_id} style={{ backgroundColor: '#111726', border: '1px solid #1e293b', borderRadius: '6px', padding: '8px 10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontWeight: 800, color: '#ffffff' }}>КА {cs.satellite_id}</span>
+                      <span style={{ fontSize: '10px', color: '#f87171', fontWeight: 700 }}>-{cs.impact_score}% SLA</span>
+                    </div>
+                    <div style={{ fontSize: '9px', color: '#94a3b8', marginTop: '4px' }}>
+                      Отказов в выборке: {cs.fail_count}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Dual Spotlight: Best Case vs Worst Case Extreme Outcomes */}
+          {(bestCase || worstCase) && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '12px' }}>
+              
+              {/* Best Case Spotlight Card */}
+              {bestCase && (
+                <div style={{
+                  backgroundColor: '#071510',
+                  border: '1px solid #10b981',
+                  borderRadius: '10px',
+                  padding: '14px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px',
+                  boxShadow: '0 4px 20px rgba(16, 185, 129, 0.15)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 800, color: '#34d399', textTransform: 'uppercase' }}>
+                      <CheckCircle2 size={16} />
+                      <span>Лучший исход (Best-Case)</span>
+                    </div>
+                    <span style={{ fontSize: '9px', backgroundColor: '#05966930', border: '1px solid #059669', color: '#6ee7b7', padding: '2px 7px', borderRadius: '4px', fontFamily: 'monospace', fontWeight: 700 }}>
+                      Максимальная надежность
+                    </span>
+                  </div>
+
+                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#ffffff' }}>
+                    {bestCase.title || bestCase.scenario_meta?.title || 'Оптимистичный сценарий'}
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontFamily: 'monospace' }}>
+                    <div style={{ backgroundColor: '#06261b', padding: '8px 10px', borderRadius: '6px', border: '1px solid #047857' }}>
+                      <div style={{ fontSize: '9px', color: '#94a3b8' }}>Доступность связи:</div>
+                      <div style={{ fontSize: '20px', fontWeight: 900, color: '#34d399', marginTop: '2px' }}>
+                        {((bestCase.overall_availability ?? 0.99) * 100).toFixed(1)}%
+                      </div>
+                    </div>
+                    <div style={{ backgroundColor: '#06261b', padding: '8px 10px', borderRadius: '6px', border: '1px solid #047857' }}>
+                      <div style={{ fontSize: '9px', color: '#94a3b8' }}>Отказов аппаратов:</div>
+                      <div style={{ fontSize: '20px', fontWeight: 900, color: '#ffffff', marginTop: '2px' }}>
+                        {bestCase.failed_count ?? bestCase.mc_failed_count ?? 0} КА
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '11px', color: '#cbd5e1', lineHeight: '1.4' }}>
+                    <b style={{ color: '#6ee7b7' }}>План восстановления:</b> {bestCase.remediation_plan}
+                  </div>
+
+                  {onVisualizeScenario && (
+                    <button
+                      onClick={() => onVisualizeScenario(bestCase.raw_scenario, bestCase.simulation_result)}
+                      style={{
+                        alignSelf: 'flex-start',
+                        backgroundColor: '#059669',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '6px 12px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        marginTop: '2px'
+                      }}
+                    >
+                      <span>3D Анализ лучшего сценария</span>
+                      <ArrowRight size={12} />
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Worst Case Spotlight Card */}
+              {worstCase && (
+                <div style={{
+                  backgroundColor: '#180a0a',
+                  border: '1px solid #ef4444',
+                  borderRadius: '10px',
+                  padding: '14px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px',
+                  boxShadow: '0 4px 20px rgba(239, 68, 68, 0.2)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 800, color: '#f87171', textTransform: 'uppercase' }}>
+                      <AlertTriangle size={16} />
+                      <span>Худший исход (Worst-Case / Стресс)</span>
+                    </div>
+                    <span style={{ fontSize: '9px', backgroundColor: '#7f1d1d40', border: '1px solid #ef4444', color: '#fca5a5', padding: '2px 7px', borderRadius: '4px', fontFamily: 'monospace', fontWeight: 700 }}>
+                      Максимальный ущерб
+                    </span>
+                  </div>
+
+                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#ffffff' }}>
+                    {worstCase.title || worstCase.scenario_meta?.title || 'Экстремальный стресс-тест'}
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontFamily: 'monospace' }}>
+                    <div style={{ backgroundColor: '#2d0c0e', padding: '8px 10px', borderRadius: '6px', border: '1px solid #7f1d1d' }}>
+                      <div style={{ fontSize: '9px', color: '#94a3b8' }}>Минимальный SLA:</div>
+                      <div style={{ fontSize: '20px', fontWeight: 900, color: '#f87171', marginTop: '2px' }}>
+                        {((worstCase.overall_availability ?? 0.70) * 100).toFixed(1)}%
+                      </div>
+                    </div>
+                    <div style={{ backgroundColor: '#2d0c0e', padding: '8px 10px', borderRadius: '6px', border: '1px solid #7f1d1d' }}>
+                      <div style={{ fontSize: '9px', color: '#94a3b8' }}>Отказов аппаратов:</div>
+                      <div style={{ fontSize: '20px', fontWeight: 900, color: '#f87171', marginTop: '2px' }}>
+                        {worstCase.failed_count ?? worstCase.mc_failed_count ?? 0} КА
+                      </div>
+                    </div>
+                  </div>
+
+                  {worstCase.failed_sat_ids && worstCase.failed_sat_ids.length > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '10px', color: '#94a3b8' }}>Отказавшие узлы:</span>
+                      {worstCase.failed_sat_ids.map((id: string) => (
+                        <span key={id} style={{ fontSize: '10px', fontFamily: 'monospace', backgroundColor: '#7f1d1d50', color: '#fca5a5', padding: '1px 5px', borderRadius: '3px', border: '1px solid #ef444450' }}>
+                          {id}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  <div style={{ fontSize: '11px', color: '#cbd5e1', lineHeight: '1.4' }}>
+                    <b style={{ color: '#fca5a5' }}>План восстановления:</b> {worstCase.remediation_plan}
+                  </div>
+
+                  {onVisualizeScenario && (
+                    <button
+                      onClick={() => onVisualizeScenario(worstCase.raw_scenario, worstCase.simulation_result)}
+                      style={{
+                        alignSelf: 'flex-start',
+                        backgroundColor: '#ef4444',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '6px 12px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        marginTop: '2px'
+                      }}
+                    >
+                      <span>3D Анализ худшего сценария</span>
+                      <ArrowRight size={12} />
+                    </button>
+                  )}
+                </div>
+              )}
+
+            </div>
+          )}
+
+          {/* Monte Carlo Failure Combinations Table with Best/Worst Filters */}
+          <div style={{ ...panelStyle, overflowX: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', borderBottom: '1px solid #333', paddingBottom: '8px' }}>
+              <h4 style={{ ...panelHeaderStyle, borderBottom: 'none', paddingBottom: 0, margin: 0 }}>
+                Сценарии испытаний Монте-Карло ({filteredMcCombinations.length})
+              </h4>
+              
+              {/* Filter controls: All / Worst / Best */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontFamily: 'monospace' }}>
+                <span style={{ color: '#94a3b8' }}>Фильтр:</span>
+                <button
+                  onClick={() => setMcFilter('all')}
+                  style={{
+                    backgroundColor: mcFilter === 'all' ? '#0284c7' : '#1e293b',
+                    color: mcFilter === 'all' ? '#ffffff' : '#94a3b8',
+                    border: `1px solid ${mcFilter === 'all' ? '#38bdf8' : '#334155'}`,
+                    borderRadius: '4px',
+                    padding: '3px 8px',
+                    cursor: 'pointer',
+                    fontWeight: mcFilter === 'all' ? 700 : 400
+                  }}
+                >
+                  Все ({mcCombinations.length})
+                </button>
+                <button
+                  onClick={() => setMcFilter('worst')}
+                  style={{
+                    backgroundColor: mcFilter === 'worst' ? '#ef4444' : '#1e293b',
+                    color: mcFilter === 'worst' ? '#ffffff' : '#f87171',
+                    border: `1px solid ${mcFilter === 'worst' ? '#f87171' : '#7f1d1d'}`,
+                    borderRadius: '4px',
+                    padding: '3px 8px',
+                    cursor: 'pointer',
+                    fontWeight: mcFilter === 'worst' ? 700 : 400
+                  }}
+                >
+                  Худшие исходы (Стресс)
+                </button>
+                <button
+                  onClick={() => setMcFilter('best')}
+                  style={{
+                    backgroundColor: mcFilter === 'best' ? '#059669' : '#1e293b',
+                    color: mcFilter === 'best' ? '#ffffff' : '#34d399',
+                    border: `1px solid ${mcFilter === 'best' ? '#34d399' : '#047857'}`,
+                    borderRadius: '4px',
+                    padding: '3px 8px',
+                    cursor: 'pointer',
+                    fontWeight: mcFilter === 'best' ? 700 : 400
+                  }}
+                >
+                  Лучшие исходы
+                </button>
+              </div>
+            </div>
+
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', fontFamily: 'monospace', textAlign: 'left', marginTop: '8px' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#111726', color: '#94a3b8', borderBottom: '1px solid #1e293b' }}>
+                  <th style={{ padding: '8px 10px' }}>Сценарий</th>
+                  <th style={{ padding: '8px 10px' }}>Вероятность</th>
+                  <th style={{ padding: '8px 10px' }}>Доступность</th>
+                  <th style={{ padding: '8px 10px' }}>Отказов КА</th>
+                  <th style={{ padding: '8px 10px' }}>Убытки</th>
+                  <th style={{ padding: '8px 10px' }}>План спасения</th>
+                  <th style={{ padding: '8px 10px' }}>Действие</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredMcCombinations.map((c: any, idx: number) => (
+                  <tr key={idx} style={{ borderBottom: '1px solid #1e293b', backgroundColor: idx % 2 === 0 ? '#0c101a' : '#080c14' }}>
+                    <td style={{ padding: '8px 10px', color: c.mc_type === 'optimistic' ? '#34d399' : '#ffffff', fontWeight: 'bold' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {c.is_worst_case ? (
+                          <span style={{ backgroundColor: '#ef444430', border: '1px solid #ef4444', color: '#fca5a5', padding: '1px 5px', borderRadius: '3px', fontSize: '9px', fontWeight: 800 }}>
+                            ХУДШИЙ
+                          </span>
+                        ) : c.is_best_case ? (
+                          <span style={{ backgroundColor: '#10b98130', border: '1px solid #10b981', color: '#6ee7b7', padding: '1px 5px', borderRadius: '3px', fontSize: '9px', fontWeight: 800 }}>
+                            ЛУЧШИЙ
+                          </span>
+                        ) : c.severity_tier === 'worst' ? (
+                          <span style={{ backgroundColor: '#7f1d1d30', border: '1px solid #ef444450', color: '#f87171', padding: '1px 5px', borderRadius: '3px', fontSize: '9px', fontWeight: 600 }}>
+                            СТРЕСС
+                          </span>
+                        ) : null}
+                        <span>{c.scenario_meta?.title || `Вариант ${idx}`}</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: '8px 10px', color: '#38bdf8' }}>
+                      {(c.mc_prob * 100).toFixed(3)}%
+                    </td>
+                    <td style={{ padding: '8px 10px' }}>
+                      <span style={{ color: (c.overall_availability * 100) >= 90 ? '#34d399' : '#f87171', fontWeight: 'bold' }}>
+                        {(c.overall_availability * 100).toFixed(1)}%
+                      </span>
+                    </td>
+                    <td style={{ padding: '8px 10px', color: c.mc_failed_count > 0 ? '#f87171' : '#64748b' }}>
+                      {c.mc_failed_count} КА
+                    </td>
+                    <td style={{ padding: '8px 10px', color: '#fbbf24', fontWeight: 'bold' }}>
+                      ${(c.total_annual_cost_usd / 1e6).toFixed(2)}M
+                    </td>
+                    <td style={{ padding: '8px 10px', color: '#cbd5e1', maxWidth: '220px' }}>
+                      {c.remediation_plan}
+                    </td>
+                    <td style={{ padding: '8px 10px' }}>
+                      {onVisualizeScenario && (
+                        <button
+                          onClick={() => onVisualizeScenario(c.raw_scenario, c.simulation_result)}
+                          style={{
+                            backgroundColor: c.is_worst_case ? '#ef4444' : c.is_best_case ? '#059669' : '#0284c7',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '4px',
+                            padding: '4px 8px',
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          3D Анализ
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
         </div>
       )}
 
@@ -500,7 +1081,7 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
               <div style={{ backgroundColor: '#12161f', border: '1px solid #38bdf840', borderRadius: '4px', padding: '10px' }}>
-                <div style={{ fontSize: '11px', color: '#38bdf8', fontWeight: 600 }}>🟦 Нормальная загрузка (ISL &lt; 50%)</div>
+                <div style={{ fontSize: '11px', color: '#38bdf8', fontWeight: 600 }}>Нормальная загрузка (ISL &lt; 50%)</div>
                 <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#fff', marginTop: '4px' }}>
                   {Math.max(1, totalSatsCount * 2 - offlineCount * 3)} линий
                 </div>
@@ -508,7 +1089,7 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
               </div>
 
               <div style={{ backgroundColor: '#12161f', border: '1px solid #f59e0b40', borderRadius: '4px', padding: '10px' }}>
-                <div style={{ fontSize: '11px', color: '#f59e0b', fontWeight: 600 }}>🟧 Высокая нагрузка (ISL 50–85%)</div>
+                <div style={{ fontSize: '11px', color: '#f59e0b', fontWeight: 600 }}>Высокая нагрузка (ISL 50–85%)</div>
                 <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#fff', marginTop: '4px' }}>
                   {Math.min(12, 4 + offlineCount * 2)} линий
                 </div>
@@ -516,7 +1097,7 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
               </div>
 
               <div style={{ backgroundColor: '#12161f', border: '1px solid #ef444440', borderRadius: '4px', padding: '10px' }}>
-                <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: 600 }}>🟥 Узкие места / Отказы (Bottlenecks)</div>
+                <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: 600 }}>Узкие места / Отказы (Bottlenecks)</div>
                 <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#fff', marginTop: '4px' }}>
                   {offlineCount > 0 ? `${offlineCount * 2} перемаршрутизировано` : '0 (Заторов нет)'}
                 </div>

@@ -209,7 +209,7 @@ export const SatelliteOutageModal: React.FC<SatelliteOutageModalProps> = ({
             gap: '6px'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontWeight: 'bold', color: '#00ff88' }}>💰 ВАРИАНТ 1: Перенастройка сетки ISL</span>
+              <span style={{ fontWeight: 'bold', color: '#00ff88' }}>ВАРИАНТ 1: Перенастройка сетки ISL</span>
               <span style={{ backgroundColor: '#00ff88', color: '#000', fontWeight: 'bold', fontSize: '9px', padding: '1px 5px', borderRadius: '3px' }}>
                 [САМЫЙ ВЫГОДНЫЙ]
               </span>
