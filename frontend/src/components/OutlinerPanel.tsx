@@ -114,11 +114,47 @@ export const OutlinerPanel: React.FC<OutlinerPanelProps> = ({
     });
   };
 
-  const planes = [1, 2, 3, 4, 5, 6];
+  const formatNodesCount = (count: number) => {
+    const mod10 = count % 10;
+    const mod100 = count % 100;
+    let word = 'узлов';
+    if (mod100 < 11 || mod100 > 19) {
+      if (mod10 === 1) word = 'узел';
+      else if (mod10 >= 2 && mod10 <= 4) word = 'узла';
+    }
+    return `${count} ${word}`;
+  };
+
+  const formatGatewaysCount = (count: number) => {
+    const mod10 = count % 10;
+    const mod100 = count % 100;
+    let word = 'шлюзов';
+    if (mod100 < 11 || mod100 > 19) {
+      if (mod10 === 1) word = 'шлюз';
+      else if (mod10 >= 2 && mod10 <= 4) word = 'шлюза';
+    }
+    return `${count} ${word}`;
+  };
+
+  const planes = React.useMemo(() => {
+    if (scenario?.satellites && scenario.satellites.length > 0) {
+      const planeSet = new Set<number>();
+      scenario.satellites.forEach(s => {
+        if (typeof s.plane === 'number') {
+          planeSet.add(s.plane);
+        }
+      });
+      if (planeSet.size > 0) {
+        return Array.from(planeSet).sort((a, b) => a - b);
+      }
+    }
+    return [1, 2, 3, 4, 5, 6];
+  }, [scenario?.satellites]);
   
   const TreeItem: React.FC<{
     label: React.ReactNode;
     icon?: React.ReactNode;
+    badge?: React.ReactNode;
     isSelected: boolean;
     onClick: () => void;
     onExpand?: () => void;
@@ -130,6 +166,7 @@ export const OutlinerPanel: React.FC<OutlinerPanelProps> = ({
   }> = ({
     label,
     icon,
+    badge,
     isSelected,
     onClick,
     onExpand,
@@ -204,6 +241,20 @@ export const OutlinerPanel: React.FC<OutlinerPanelProps> = ({
         >
           {label}
         </span>
+        {badge !== undefined && badge !== null && (
+          <span
+            style={{
+              fontSize: '11px',
+              color: isSelected ? '#a5d8ff' : '#777777',
+              marginRight: '6px',
+              flexShrink: 0,
+              fontWeight: 500,
+              userSelect: 'none'
+            }}
+          >
+            {badge}
+          </span>
+        )}
         {onToggleVisibility && (
           <button
             type="button"
@@ -272,6 +323,7 @@ export const OutlinerPanel: React.FC<OutlinerPanelProps> = ({
         <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
           <TreeItem 
             label="Наземные шлюзы" 
+            badge={scenario?.gateways?.length || 0}
             icon={<MapPin size={12} />}
             isSelected={selectedItem?.type === 'gateway' && selectedItem?.id === 'all'}
             onClick={() => setGatewaysExpanded(!gatewaysExpanded)}
@@ -302,6 +354,7 @@ export const OutlinerPanel: React.FC<OutlinerPanelProps> = ({
               <React.Fragment key={pNum}>
                 <TreeItem 
                   label={`Плоскость ${pNum}`} 
+                  badge={planeSats.length}
                   icon={<RadioReceiver size={12} />}
                   isSelected={selectedItem?.type === 'plane' && selectedItem?.id === pNum}
                   onClick={() => setSelectedItem({ type: 'plane', id: pNum })}
@@ -417,6 +470,77 @@ export const OutlinerPanel: React.FC<OutlinerPanelProps> = ({
                   <span>{!settings.hiddenPlanes?.[selectedItem.id] ? 'Видима' : 'Скрыта'}</span>
                 </button>
               </div>
+
+              {/* Node statistics block */}
+              {(() => {
+                const planeSats = scenario?.satellites?.filter(s => s.plane === selectedItem.id) || [];
+                const isPlaneHidden = !!settings.hiddenPlanes?.[selectedItem.id];
+                const hiddenCount = planeSats.filter(s => !!settings.hiddenSatellites?.[s.id]).length;
+                const visibleCount = isPlaneHidden ? 0 : planeSats.length - hiddenCount;
+
+                return (
+                  <div style={{
+                    backgroundColor: 'rgba(20, 115, 230, 0.12)',
+                    border: '1px solid rgba(20, 115, 230, 0.25)',
+                    borderRadius: '6px',
+                    padding: '8px 10px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: '#aaa', fontSize: '11px' }}>Узлов (спутников) на орбите:</span>
+                      <span style={{ color: '#00f0ff', fontWeight: 700, fontSize: '12px' }}>
+                        {formatNodesCount(planeSats.length)}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px' }}>
+                      <span style={{ color: '#888' }}>Видимость на 3D сцене:</span>
+                      <span style={{ color: visibleCount > 0 ? '#00ff88' : '#ff4d4f', fontWeight: 600 }}>
+                        {visibleCount} из {planeSats.length}
+                      </span>
+                    </div>
+                    {planeSats.length > 0 && (
+                      <div style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: '4px',
+                        marginTop: '2px',
+                        paddingTop: '6px',
+                        borderTop: '1px solid rgba(255,255,255,0.06)'
+                      }}>
+                        {planeSats.map(s => {
+                          const isSatHidden = isPlaneHidden || !!settings.hiddenSatellites?.[s.id];
+                          return (
+                            <span
+                              key={s.id}
+                              onClick={() => {
+                                setSelectedItem({ type: 'satellite', id: s.id });
+                                if (onSelectSatellite) onSelectSatellite(s);
+                              }}
+                              style={{
+                                fontSize: '10px',
+                                fontFamily: 'monospace',
+                                padding: '2px 6px',
+                                borderRadius: '3px',
+                                backgroundColor: isSatHidden ? 'rgba(255,255,255,0.05)' : 'rgba(20, 115, 230, 0.25)',
+                                color: isSatHidden ? '#777' : '#93c5fd',
+                                border: isSatHidden ? '1px solid #444' : '1px solid rgba(20, 115, 230, 0.4)',
+                                cursor: 'pointer',
+                                textDecoration: isSatHidden ? 'line-through' : 'none',
+                                transition: 'all 0.15s ease'
+                              }}
+                              title={`Перейти к узлу ${s.id}`}
+                            >
+                              {s.id}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* 1. RAAN Slider */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
