@@ -1,8 +1,15 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { ScenarioData, OutlinerSettings, Satellite, SatelliteOutage } from '../types';
 import { getDynamicSatelliteTelemetry } from '../utils/telemetry';
+import {
+  loadSatelliteModels,
+  getCachedSatelliteModels,
+  buildSatellite3DObject,
+  updateSatelliteLOD,
+  SatelliteStatus
+} from '../utils/satelliteModelLoader';
 
 interface ThreeCanvasProps {
   scenario: ScenarioData | null;
@@ -48,6 +55,18 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
   const satPosMapRef = useRef<Record<string, THREE.Vector3>>({});
+  const [modelsLoaded, setModelsLoaded] = useState(false);
+
+  const focusedSatelliteIdRef = useRef<string | null>(focusedSatelliteId);
+  useEffect(() => {
+    focusedSatelliteIdRef.current = focusedSatelliteId;
+  }, [focusedSatelliteId]);
+
+  useEffect(() => {
+    loadSatelliteModels()
+      .then(() => setModelsLoaded(true))
+      .catch((e) => console.warn('Could not load 3D satellite models:', e));
+  }, []);
 
   useEffect(() => {
     if (!mountRef.current) return;
@@ -98,8 +117,20 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
       const intersects = raycaster.intersectObjects(satMeshes, false);
 
       if (intersects.length > 0) {
-        const hitMesh = intersects[0].object as THREE.Mesh;
-        const sat = satMeshMapRef.current.get(hitMesh);
+        let sat: Satellite | undefined;
+        for (const inter of intersects) {
+          sat = satMeshMapRef.current.get(inter.object as THREE.Mesh);
+          if (sat) break;
+          let parent = inter.object.parent;
+          while (parent) {
+            if ((parent as any).userData?.satellite) {
+              sat = (parent as any).userData.satellite;
+              break;
+            }
+            parent = parent.parent;
+          }
+          if (sat) break;
+        }
         if (sat) {
           onSelectSatellite(sat);
         }
@@ -239,6 +270,16 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
         else if (dot < 0.2) op = 0.15 + (0.85) * (dot / 0.2);
         
         sprite.material.opacity = op;
+      });
+
+      // Update 3D Satellite LOD based on map zoom & camera distance
+      const currentFocusedId = focusedSatelliteIdRef.current;
+      groupsRef.current.satellites.children.forEach(child => {
+        if (child.name === 'Satellite3D') {
+          const sat = (child as any).userData?.satellite as Satellite | undefined;
+          const isFocused = !!(sat && sat.id === currentFocusedId);
+          updateSatelliteLOD(child as THREE.Group, camera, isFocused);
+        }
       });
 
       renderer.render(scene, camera);
@@ -388,11 +429,41 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
       planeMap[planeNum].push({ sat, pos, posKm, isOffline, isHighLatency, uAngle: u });
 
       if (settings.showSatellites) {
-        const mat = isOffline ? offlineSatMat : isHighLatency ? highLatencySatMat : activeSatMat;
-        const satMesh = new THREE.Mesh(satGeo, mat);
-        satMesh.position.copy(pos);
-        satellites.add(satMesh);
-        satMeshMapRef.current.set(satMesh, sat);
+        const modelsTemplate = getCachedSatelliteModels();
+        const status: SatelliteStatus = isOffline ? 'offline' : isHighLatency ? 'highLatency' : 'active';
+        const isFocused = sat.id === focusedSatelliteId;
+
+        const { satGroup, hitMesh, modelMeshes } = buildSatellite3DObject(
+          modelsTemplate,
+          status,
+          settings,
+          settings.satSize,
+          isFocused
+        );
+
+        satGroup.position.copy(pos);
+
+        // Orient satellite body towards Earth (nadir) with solar panels tangential
+        if (Math.abs(pos.y / (pos.length() || 1)) > 0.95) {
+          satGroup.up.set(1, 0, 0);
+        } else {
+          satGroup.up.set(0, 1, 0);
+        }
+        satGroup.lookAt(0, 0, 0);
+
+        satGroup.userData = { satellite: sat };
+        satellites.add(satGroup);
+
+        // Register both hitMesh and model meshes for click selection
+        satMeshMapRef.current.set(hitMesh, sat);
+        modelMeshes.forEach(mesh => {
+          satMeshMapRef.current.set(mesh, sat);
+        });
+
+        // Initialize LOD state immediately
+        if (cameraRef.current) {
+          updateSatelliteLOD(satGroup, cameraRef.current, isFocused);
+        }
 
         if (settings.satGlow) {
           const hexStr = isOffline ? settings.offlineSatColor : isHighLatency ? settings.highLatencySatColor : settings.satColor;
@@ -400,7 +471,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
             map: createGlowTextureFromHex(hexStr || '#00f0ff'),
             color: 0xffffff,
             transparent: true,
-            opacity: 0.9,
+            opacity: isFocused ? 0.4 : 0.85,
             blending: THREE.AdditiveBlending
           });
           const glowSprite = new THREE.Sprite(glowMat);
@@ -428,7 +499,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
         const coneMat = new THREE.MeshBasicMaterial({
           color: isOffline ? settings.offlineSatColor : (settings.fovConeColor || settings.satColor),
           transparent: true,
-          opacity: 0.35,
+          opacity: 0.18,
           side: THREE.DoubleSide,
           depthWrite: false
         });
@@ -443,6 +514,11 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
         coneMesh.rotateX(Math.PI / 2);
 
         fovCones.add(coneMesh);
+
+        // Illuminating accent light on focused satellite so 3D model pops out
+        const satHighlightLight = new THREE.PointLight(0xffffff, 3.0, 10);
+        satHighlightLight.position.copy(pos);
+        fovCones.add(satHighlightLight);
 
         // Coverage circle footprint on Earth surface
         const footGeo = new THREE.RingGeometry(coneRadius * 0.96, coneRadius, 48);
@@ -742,7 +818,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
       });
     }
 
-  }, [scenario, settings, currentTime, outages, focusedSatelliteId]);
+  }, [scenario, settings, currentTime, outages, focusedSatelliteId, modelsLoaded]);
 
   return (
     <div

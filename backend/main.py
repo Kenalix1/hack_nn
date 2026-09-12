@@ -7,7 +7,7 @@ import math
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, HTTPException, UploadFile, File
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -398,6 +398,19 @@ def compare_scenarios(req: CompareRequest):
 dist_assets = BASE_DIR / "frontend" / "dist" / "assets"
 if dist_assets.exists():
     app.mount("/assets", StaticFiles(directory=str(dist_assets)), name="assets")
+
+@app.get("/{filename}.gltf")
+def get_gltf_model(filename: str):
+    dist_file = BASE_DIR / "frontend" / "dist" / f"{filename}.gltf"
+    if dist_file.exists():
+        return FileResponse(dist_file, media_type="model/gltf+json")
+    root_file = BASE_DIR / f"{filename}.gltf"
+    if root_file.exists():
+        return FileResponse(root_file, media_type="model/gltf+json")
+    pub_file = BASE_DIR / "frontend" / "public" / f"{filename}.gltf"
+    if pub_file.exists():
+        return FileResponse(pub_file, media_type="model/gltf+json")
+    raise HTTPException(status_code=404, detail="Model not found")
 
 @app.get("/", response_class=HTMLResponse)
 def index_page():
