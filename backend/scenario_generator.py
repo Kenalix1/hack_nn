@@ -33,18 +33,7 @@ def allocate_samples(k, n, max_samples):
     else:
         return min(20, max_samples // 50)
 
-def benchmark_single_scenario(scenario):
-    # Mock benchmark: 0.1 seconds
-    return 0.1
-
-def generate_scenarios(base_scenario, time_budget_minutes, settings):
-    # 1. Estimate throughput
-    throughput = benchmark_single_scenario(base_scenario)
-    # Using 8 cores for parallel
-    import os
-    n_cpu = os.cpu_count() or 8
-    max_scenarios = int(time_budget_minutes * 60 / throughput * n_cpu)
-    
+def generate_scenarios(base_scenario, max_scenarios, settings):
     scenarios = []
     horizon_s = base_scenario['environment']['horizon_s']
     

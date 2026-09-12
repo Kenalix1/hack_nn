@@ -11,7 +11,7 @@ interface MassSimulationModalProps {
 }
 
 export const MassSimulationModal: React.FC<MassSimulationModalProps> = ({ scenario, onClose, onDrillDown, onSetCriticalSatellites, failureProb, launchCost }) => {
-  const [timeBudget, setTimeBudget] = useState<number>(5);
+  const [maxScenarios, setMaxScenarios] = useState<number>(500);
   const [includeRaanOpt, setIncludeRaanOpt] = useState<boolean>(false);
   const [taskId, setTaskId] = useState<string | null>(null);
   const [status, setStatus] = useState<'idle' | 'running' | 'completed' | 'error'>('idle');
@@ -27,7 +27,7 @@ export const MassSimulationModal: React.FC<MassSimulationModalProps> = ({ scenar
   const startSimulation = async () => {
     try {
       setStatus('running');
-      let url = `/api/mass_simulate?time_budget_minutes=${timeBudget}&include_raan_opt=${includeRaanOpt}`;
+      let url = `/api/mass_simulate?max_scenarios=${maxScenarios}&include_raan_opt=${includeRaanOpt}`;
       if (failureProb !== undefined) url += `&failure_probability=${failureProb}`;
       if (launchCost !== undefined) url += `&emergency_launch_cost_usd=${launchCost}`;
       
@@ -102,8 +102,8 @@ export const MassSimulationModal: React.FC<MassSimulationModalProps> = ({ scenar
         <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
           <h3>Настройки массовой симуляции</h3>
           <div>
-            <label>Временной бюджет (мин): {timeBudget}</label>
-            <input type="range" min="2" max="30" value={timeBudget} onChange={e => setTimeBudget(Number(e.target.value))} style={{ width: '100%' }} />
+            <label>Количество комбинаций (сценариев): {maxScenarios}</label>
+            <input type="range" min="10" max="5000" step="10" value={maxScenarios} onChange={e => setMaxScenarios(Number(e.target.value))} style={{ width: '100%' }} />
           </div>
           <div>
             <label>

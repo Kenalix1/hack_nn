@@ -430,7 +430,7 @@ mass_sim_tasks = {}
 @app.post("/api/mass_simulate")
 def mass_simulate(
     req: SimulateRequest,
-    time_budget_minutes: int = Query(default=5, ge=2, le=30),
+    max_scenarios: int = Query(default=500, ge=10, le=10000),
     include_raan_opt: bool = Query(default=False),
     failure_probability: float = Query(default=None),
     emergency_launch_cost_usd: float = Query(default=None),
@@ -466,7 +466,7 @@ def mass_simulate(
             
             all_generated = []
             for bs in base_scenarios:
-                all_generated.extend(generate_scenarios(bs, time_budget_minutes / len(base_scenarios), settings_dict))
+                all_generated.extend(generate_scenarios(bs, max_scenarios // len(base_scenarios), settings_dict))
                 
             mass_sim_tasks[task_id]["progress"]["total"] = len(all_generated)
             
