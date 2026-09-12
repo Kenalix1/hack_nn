@@ -174,8 +174,6 @@ def simulate(req: SimulateRequest, db: Session = Depends(get_db)):
         }
         
         result = run_simulation(scenario, settings_dict)
-        
-        scenario_id = scenario.get("meta", {}).get("id", "custom_uploaded")
         title = scenario.get("meta", {}).get("title", "Пользовательский Сценарий")
         
         # Save to DB
