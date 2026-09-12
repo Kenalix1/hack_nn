@@ -478,9 +478,14 @@ export const App: React.FC = () => {
   };
 
   // Satellite Outages Handlers & Fly-to Focus
-  const handleSelectSatellite = (sat: Satellite) => {
-    setSelectedSatellite(sat);
+  const handleSelectSatellite = (sat: Satellite | null) => {
+    if (!sat) {
+      setFocusedSatelliteId(null);
+      setSelectedSatellite(null);
+      return;
+    }
     setFocusedSatelliteId(sat.id);
+    setSelectedSatellite(sat);
     addLog(`Камера сфокусирована на спутнике [${sat.id}]. Отображается 3D-конус угла обзора (10°)`, 'info');
   };
 
@@ -737,6 +742,9 @@ export const App: React.FC = () => {
           settings={outlinerSettings}
           onChangeSettings={setOutlinerSettings}
           isOpen={isSidebarOpen}
+          scenario={scenarioData}
+          focusedSatelliteId={focusedSatelliteId}
+          onSelectSatellite={handleSelectSatellite}
         />
 
         <TimelineBar
