@@ -17,6 +17,11 @@ type SelectedItem =
   | { type: 'gateway', id: string }
   | null;
 
+const getSatPlane = (sat: Satellite): number => {
+  if (typeof sat.plane === 'number') return sat.plane;
+  return parseInt(String((sat as any).plane_id || sat.plane || '1').replace('P', '')) || 1;
+};
+
 export const OutlinerPanel: React.FC<OutlinerPanelProps> = ({
   settings,
   onChangeSettings,
@@ -34,7 +39,8 @@ export const OutlinerPanel: React.FC<OutlinerPanelProps> = ({
       setSelectedItem({ type: 'satellite', id: focusedSatelliteId });
       const sat = scenario?.satellites?.find(s => s.id === focusedSatelliteId);
       if (sat) {
-        setExpandedPlanes(p => ({ ...p, [sat.plane]: true }));
+        const pNum = getSatPlane(sat);
+        setExpandedPlanes(p => ({ ...p, [pNum]: true }));
       }
     } else {
       if (selectedItem?.type === 'satellite') {
@@ -74,11 +80,11 @@ export const OutlinerPanel: React.FC<OutlinerPanelProps> = ({
 
   const handleTogglePlaneVisibility = (planeNum: number, e: React.MouseEvent) => {
     e.stopPropagation();
-    const isCurrentlyHidden = !!settings.hiddenPlanes?.[planeNum];
+    const isCurrentlyHidden = !!settings?.hiddenPlanes?.[planeNum];
     onChangeSettings({
       ...settings,
       hiddenPlanes: {
-        ...(settings.hiddenPlanes || {}),
+        ...(settings?.hiddenPlanes || {}),
         [planeNum]: !isCurrentlyHidden
       }
     });
@@ -86,11 +92,11 @@ export const OutlinerPanel: React.FC<OutlinerPanelProps> = ({
 
   const handleToggleSatVisibility = (satId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const isCurrentlyHidden = !!settings.hiddenSatellites?.[satId];
+    const isCurrentlyHidden = !!settings?.hiddenSatellites?.[satId];
     onChangeSettings({
       ...settings,
       hiddenSatellites: {
-        ...(settings.hiddenSatellites || {}),
+        ...(settings?.hiddenSatellites || {}),
         [satId]: !isCurrentlyHidden
       }
     });
@@ -98,17 +104,17 @@ export const OutlinerPanel: React.FC<OutlinerPanelProps> = ({
 
   const handleToggleGatewaysGroupVisibility = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const isCurrentlyHidden = settings.showGateways === false;
+    const isCurrentlyHidden = settings?.showGateways === false;
     updateSetting('showGateways', isCurrentlyHidden);
   };
 
   const handleToggleGatewayVisibility = (gwId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const isCurrentlyHidden = !!settings.hiddenGateways?.[gwId];
+    const isCurrentlyHidden = !!settings?.hiddenGateways?.[gwId];
     onChangeSettings({
       ...settings,
       hiddenGateways: {
-        ...(settings.hiddenGateways || {}),
+        ...(settings?.hiddenGateways || {}),
         [gwId]: !isCurrentlyHidden
       }
     });
@@ -140,15 +146,13 @@ export const OutlinerPanel: React.FC<OutlinerPanelProps> = ({
     if (scenario?.satellites && scenario.satellites.length > 0) {
       const planeSet = new Set<number>();
       scenario.satellites.forEach(s => {
-        if (typeof s.plane === 'number') {
-          planeSet.add(s.plane);
-        }
+        planeSet.add(getSatPlane(s));
       });
       if (planeSet.size > 0) {
         return Array.from(planeSet).sort((a, b) => a - b);
       }
     }
-    return [1, 2, 3, 4, 5, 6];
+    return [1, 2, 3];
   }, [scenario?.satellites]);
   
   const TreeItem: React.FC<{
@@ -347,7 +351,7 @@ export const OutlinerPanel: React.FC<OutlinerPanelProps> = ({
 
           {planes.map(pNum => {
             const isExpanded = expandedPlanes[pNum];
-            const planeSats = scenario?.satellites?.filter(s => s.plane === pNum) || [];
+            const planeSats = scenario?.satellites?.filter(s => getSatPlane(s) === pNum) || [];
             const isPlaneHidden = !!settings.hiddenPlanes?.[pNum];
             
             return (
@@ -473,7 +477,7 @@ export const OutlinerPanel: React.FC<OutlinerPanelProps> = ({
 
               {/* Node statistics block */}
               {(() => {
-                const planeSats = scenario?.satellites?.filter(s => s.plane === selectedItem.id) || [];
+                const planeSats = scenario?.satellites?.filter(s => getSatPlane(s) === selectedItem.id) || [];
                 const isPlaneHidden = !!settings.hiddenPlanes?.[selectedItem.id];
                 const hiddenCount = planeSats.filter(s => !!settings.hiddenSatellites?.[s.id]).length;
                 const visibleCount = isPlaneHidden ? 0 : planeSats.length - hiddenCount;
@@ -587,7 +591,8 @@ export const OutlinerPanel: React.FC<OutlinerPanelProps> = ({
           {selectedItem && selectedItem.type === 'satellite' && (() => {
             const sat = scenario?.satellites?.find(s => s.id === selectedItem.id);
             if (!sat) return <div style={{ color: '#888' }}>Нет данных</div>;
-            const isSatVisible = !settings.hiddenPlanes?.[sat.plane] && !settings.hiddenSatellites?.[sat.id];
+            const satPlane = getSatPlane(sat);
+            const isSatVisible = !settings?.hiddenPlanes?.[satPlane] && !settings?.hiddenSatellites?.[sat.id];
 
             return (
               <div style={sectionStyle}>
@@ -622,7 +627,7 @@ export const OutlinerPanel: React.FC<OutlinerPanelProps> = ({
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: '#aaa' }}>Плоскость</span>
-                    <span style={{ color: '#fff' }}>P{sat.plane}</span>
+                    <span style={{ color: '#fff' }}>P{satPlane}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: '#aaa' }}>Наклонение</span>

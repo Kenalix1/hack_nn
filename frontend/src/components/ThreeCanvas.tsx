@@ -667,7 +667,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
 
       if (settings.showLabels && isVisible) {
         const isFocused = sat.id === focusedSatelliteId;
-        const labelText = isFocused ? `${sat.id} [Фокус]` : isOffline ? `${sat.id} [ОТКАЗ]` : isHighLatency ? `${sat.id} [! Задержка]` : sat.id;
+        const labelText = sat.id;
         const labelColor = isOffline ? settings.offlineSatColor : isFocused ? '#ffffff' : isHighLatency ? settings.highLatencySatColor : settings.satColor;
         const labelSprite = createTextLabelSprite(labelText, '#ffffff', labelColor || '#ffffff');
         const satNormal = pos.clone().normalize();
