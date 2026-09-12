@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, RotateCcw, Layers, BarChart2, Settings, Copy, PanelRight, ShieldAlert, FileText, Map } from 'lucide-react';
+import { Play, RotateCcw, Layers, BarChart2, Settings, Copy, PanelRight, ShieldAlert, FileText, Map, Globe } from 'lucide-react';
 
 interface HeaderProps {
   scenarios: Array<{ id: string; title: string }>;
@@ -13,6 +13,8 @@ interface HeaderProps {
   onExportResultsJson?: () => void;
   onOpenPdfReport?: () => void;
   onResetState?: () => void;
+  viewMode?: '3d' | '2d';
+  onToggleViewMode?: (mode: '3d' | '2d') => void;
   isSidebarOpen: boolean;
   isSimulating: boolean;
 }
@@ -29,6 +31,8 @@ export const Header: React.FC<HeaderProps> = ({
   onExportResultsJson,
   onOpenPdfReport,
   onResetState,
+  viewMode = '3d',
+  onToggleViewMode,
   isSidebarOpen,
   isSimulating
 }) => {
@@ -355,6 +359,45 @@ export const Header: React.FC<HeaderProps> = ({
           {isSimulating ? <RotateCcw size={14} className="animate-spin" /> : <Play size={14} />}
           <span>{isSimulating ? 'Расчет...' : 'Запустить Симуляцию'}</span>
         </button>
+
+        {onToggleViewMode && (
+          <div style={{ display: 'flex', backgroundColor: '#1a1d24', border: '1px solid #333943', borderRadius: '6px', padding: '2px', marginLeft: '6px' }}>
+            <button
+              onClick={() => onToggleViewMode('3d')}
+              className="hdr-btn"
+              style={{
+                height: '28px',
+                padding: '0 10px',
+                backgroundColor: viewMode === '3d' ? '#1473e6' : 'transparent',
+                color: viewMode === '3d' ? '#ffffff' : '#94a3b8',
+                border: 'none',
+                borderRadius: '4px',
+                fontWeight: 600
+              }}
+              title="Переключить рабочую область на 3D Глобус"
+            >
+              <Globe size={13} />
+              <span>3D Глобус</span>
+            </button>
+            <button
+              onClick={() => onToggleViewMode('2d')}
+              className="hdr-btn"
+              style={{
+                height: '28px',
+                padding: '0 10px',
+                backgroundColor: viewMode === '2d' ? '#0284c7' : 'transparent',
+                color: viewMode === '2d' ? '#ffffff' : '#94a3b8',
+                border: 'none',
+                borderRadius: '4px',
+                fontWeight: 600
+              }}
+              title="Переключить рабочую область на 2D карту OpenStreetMap (без флагов)"
+            >
+              <Map size={13} />
+              <span>2D OpenStreetMap</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Windows Shortcuts (Desktop) */}
@@ -371,11 +414,6 @@ export const Header: React.FC<HeaderProps> = ({
         >
           <ShieldAlert size={14} style={{ color: '#ff4444' }} />
           <span>Симуляция ЧС</span>
-        </button>
-
-        <button onClick={() => onOpenWindow('map2d')} className="hdr-btn hdr-btn-secondary" title="Открыть плавающее окно 2D Карты с трассами орбит">
-          <Map size={14} style={{ color: '#00ff88' }} />
-          <span>2D Карта</span>
         </button>
 
         <button onClick={() => onOpenWindow('analytics')} className="hdr-btn hdr-btn-secondary">

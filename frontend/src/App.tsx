@@ -13,7 +13,7 @@ import { CriticalSatellitesAlertBar } from './components/CriticalSatellitesAlert
 import { SatelliteOutageModal } from './components/SatelliteOutageModal';
 import { EmergencyModal } from './components/EmergencyModal';
 import { ScenariosModal } from './components/ScenariosModal';
-import { TwoDMapModal } from './components/TwoDMapModal';
+import { TwoDMapCanvas } from './components/TwoDMapCanvas';
 import { ScenarioData, OutlinerSettings, LogMessage, Satellite, SatelliteOutage } from './types';
 import { openPdfReport } from './utils/generatePdfReport';
 import { Eye, RotateCcw } from 'lucide-react';
@@ -98,6 +98,7 @@ export const App: React.FC = () => {
   const [currentTimeSeconds, setCurrentTimeSeconds] = useState<number>(
     initialSaved?.currentTimeSeconds || 0
   );
+  const [viewMode, setViewMode] = useState<'3d' | '2d'>('3d');
 
   // Focus & Outages State
   const [focusedSatelliteId, setFocusedSatelliteId] = useState<string | null>(null);
@@ -768,6 +769,8 @@ export const App: React.FC = () => {
         onExportResultsJson={handleExportResultsJson}
         onOpenPdfReport={() => openPdfReport(scenarioData)}
         onResetState={handleResetState}
+        viewMode={viewMode}
+        onToggleViewMode={setViewMode}
         isSidebarOpen={isSidebarOpen}
         isSimulating={isSimulating}
       />
@@ -812,15 +815,29 @@ export const App: React.FC = () => {
             currentTimeSeconds={currentTimeSeconds}
             onSelectSatellite={handleSelectSatellite}
           />
-          <ThreeCanvas
-            scenario={scenarioData}
-            settings={outlinerSettings}
-            currentTime={currentTimeSeconds}
-            outages={currentOutages}
-            criticalSatellites={criticalSatellites}
-            focusedSatelliteId={focusedSatelliteId}
-            onSelectSatellite={handleSelectSatellite}
-          />
+          {viewMode === '3d' ? (
+            <ThreeCanvas
+              scenario={scenarioData}
+              settings={outlinerSettings}
+              currentTime={currentTimeSeconds}
+              outages={currentOutages}
+              criticalSatellites={criticalSatellites}
+              focusedSatelliteId={focusedSatelliteId}
+              onSelectSatellite={handleSelectSatellite}
+            />
+          ) : (
+            <TwoDMapCanvas
+              scenario={scenarioData}
+              settings={outlinerSettings}
+              currentTime={currentTimeSeconds}
+              outages={currentOutages}
+              onSelectSatellite={(satId) => {
+                const s = scenarioData?.satellites.find(x => x.id === satId);
+                if (s) setSelectedSatellite(s);
+              }}
+            />
+          )}
+
           <TimelineBar
             currentTime={currentTimeSeconds}
             maxTime={86400}
@@ -859,27 +876,6 @@ export const App: React.FC = () => {
             onClose={() => setSelectedSatellite(null)}
             onApplyOutage={handleApplyOutage}
             onRestoreSatellite={handleRestoreSatellite}
-          />
-        </DraggableWindow>
-
-        <DraggableWindow
-          id="map2d"
-          title="2D Карта Орбитальной Группировки (Equirectangular Lat/Lon)"
-          isOpen={windows.map2d?.isOpen ?? false}
-          onClose={() => closeWindow('map2d')}
-          zIndex={windows.map2d?.zIndex ?? 9}
-          onFocus={() => focusWindow('map2d')}
-          initialPos={{ x: 100, y: 50, width: 860, height: 530 }}
-        >
-          <TwoDMapModal
-            scenario={scenarioData}
-            outages={currentOutages}
-            currentTime={currentTimeSeconds}
-            settings={outlinerSettings}
-            onSelectSatellite={(satId) => {
-              const s = scenarioData?.satellites.find(x => x.id === satId);
-              if (s) setSelectedSatellite(s);
-            }}
           />
         </DraggableWindow>
 
