@@ -41,20 +41,14 @@ export const TimelineBar: React.FC<TimelineBarProps> = ({
 
   return (
     <div style={{
-      position: 'fixed',
+      position: 'absolute',
       bottom: '16px',
-      left: '50%',
-      transform: 'translateX(-50%)',
-      width: '680px',
-      maxWidth: 'calc(100vw - 24px)',
-      backgroundColor: '#1f1f1f',
-      border: '1px solid #383838',
-      borderRadius: '8px',
-      padding: '8px 16px',
+      right: '16px',
+      width: '560px',
+      maxWidth: 'calc(100% - 32px)',
       display: 'flex',
       alignItems: 'center',
-      gap: '12px',
-      boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+      gap: '10px',
       zIndex: 85,
       color: '#e0e0e0',
       fontSize: '12px'
@@ -75,7 +69,8 @@ export const TimelineBar: React.FC<TimelineBarProps> = ({
             ...btnStyle,
             backgroundColor: isPlaying ? '#ff3b30' : '#1473e6',
             color: '#fff',
-            border: 'none'
+            border: 'none',
+            boxShadow: isPlaying ? '0 2px 8px rgba(255, 59, 48, 0.5)' : '0 2px 8px rgba(20, 115, 230, 0.5)'
           }}
           title={isPlaying ? 'Пауза' : 'Воспроизведение'}
         >
@@ -92,7 +87,7 @@ export const TimelineBar: React.FC<TimelineBarProps> = ({
       </div>
 
       {/* Interactive Time Slider */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px', minWidth: '130px' }}>
         <input
           type="range"
           min="0"
@@ -106,10 +101,19 @@ export const TimelineBar: React.FC<TimelineBarProps> = ({
           style={{
             width: '100%',
             accentColor: '#1473e6',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            height: '6px',
+            filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.8))'
           }}
         />
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#888' }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          fontSize: '10px',
+          color: '#bbb',
+          fontWeight: 600,
+          textShadow: '0 1px 3px rgba(0,0,0,0.9), 0 0 2px #000'
+        }}>
           <span>T=0с</span>
           <span>{Math.round((currentTime / maxTime) * 100)}%</span>
           <span>T=24ч</span>
@@ -118,19 +122,22 @@ export const TimelineBar: React.FC<TimelineBarProps> = ({
 
       {/* Step dt Selector Buttons */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-        <span style={{ fontSize: '11px', color: '#888' }}>dt:</span>
+        <span style={{ fontSize: '11px', color: '#aaa', fontWeight: 600, textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}>dt:</span>
         {[1, 10, 60, 300].map(s => (
           <button
             key={s}
             onClick={() => onChangeStep(s)}
             style={{
-              padding: '2px 6px',
+              padding: '3px 6px',
               borderRadius: '3px',
               fontSize: '10px',
+              fontWeight: 600,
               border: '1px solid #444',
-              backgroundColor: stepSeconds === s ? '#1473e6' : '#141414',
-              color: stepSeconds === s ? '#fff' : '#aaa',
-              cursor: 'pointer'
+              backgroundColor: stepSeconds === s ? '#1473e6' : 'rgba(25, 25, 25, 0.85)',
+              color: stepSeconds === s ? '#fff' : '#ccc',
+              cursor: 'pointer',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.4)',
+              backdropFilter: 'blur(4px)'
             }}
           >
             {s >= 60 ? `${s / 60}м` : `${s}с`}
@@ -144,11 +151,13 @@ export const TimelineBar: React.FC<TimelineBarProps> = ({
         alignItems: 'center',
         gap: '6px',
         fontFamily: 'monospace',
-        backgroundColor: '#141414',
+        backgroundColor: 'rgba(20, 20, 20, 0.85)',
         border: '1px solid #333',
         padding: '4px 8px',
         borderRadius: '4px',
-        color: '#00ff88'
+        color: '#00ff88',
+        boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
+        backdropFilter: 'blur(4px)'
       }}>
         <Clock size={12} />
         <span>{formatHours(currentTime)}</span>
@@ -159,14 +168,16 @@ export const TimelineBar: React.FC<TimelineBarProps> = ({
         value={speedMultiplier}
         onChange={(e) => setSpeedMultiplier(parseInt(e.target.value))}
         style={{
-          backgroundColor: '#141414',
+          backgroundColor: 'rgba(20, 20, 20, 0.85)',
           color: '#ccc',
           border: '1px solid #333',
           borderRadius: '4px',
           padding: '4px 6px',
           fontSize: '11px',
           outline: 'none',
-          cursor: 'pointer'
+          cursor: 'pointer',
+          boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
+          backdropFilter: 'blur(4px)'
         }}
       >
         <option value={1}>1x</option>
@@ -180,14 +191,16 @@ export const TimelineBar: React.FC<TimelineBarProps> = ({
 };
 
 const btnStyle: React.CSSProperties = {
-  backgroundColor: '#2a2a2a',
+  backgroundColor: 'rgba(28, 28, 28, 0.85)',
   color: '#d0d0d0',
-  border: '1px solid #3a3a3a',
+  border: '1px solid #444',
   borderRadius: '4px',
   width: '28px',
   height: '28px',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  cursor: 'pointer'
+  cursor: 'pointer',
+  boxShadow: '0 2px 6px rgba(0, 0, 0, 0.4)',
+  backdropFilter: 'blur(4px)'
 };

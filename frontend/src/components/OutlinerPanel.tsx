@@ -1,19 +1,47 @@
-import React, { useState } from 'react';
-import { Eye, Sliders, Palette, Clock, Layers, Compass, MoveRight } from 'lucide-react';
-import { OutlinerSettings } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Layers, Compass, ChevronDown, ChevronRight, RadioReceiver, MapPin, Eye, EyeOff } from 'lucide-react';
+import { OutlinerSettings, ScenarioData, Satellite } from '../types';
 
 interface OutlinerPanelProps {
   settings: OutlinerSettings;
   onChangeSettings: (newSettings: OutlinerSettings) => void;
   isOpen: boolean;
+  scenario?: ScenarioData | null;
+  focusedSatelliteId?: string | null;
+  onSelectSatellite?: (sat: Satellite | null) => void;
 }
+
+type SelectedItem = 
+  | { type: 'plane', id: number }
+  | { type: 'satellite', id: string }
+  | { type: 'gateway', id: string }
+  | null;
 
 export const OutlinerPanel: React.FC<OutlinerPanelProps> = ({
   settings,
   onChangeSettings,
-  isOpen
+  isOpen,
+  scenario,
+  focusedSatelliteId,
+  onSelectSatellite
 }) => {
-  const [selectedPlane, setSelectedPlane] = useState<number>(1);
+  const [selectedItem, setSelectedItem] = useState<SelectedItem>(null);
+  const [expandedPlanes, setExpandedPlanes] = useState<Record<number, boolean>>({});
+  const [gatewaysExpanded, setGatewaysExpanded] = useState(false);
+
+  useEffect(() => {
+    if (focusedSatelliteId) {
+      setSelectedItem({ type: 'satellite', id: focusedSatelliteId });
+      const sat = scenario?.satellites?.find(s => s.id === focusedSatelliteId);
+      if (sat) {
+        setExpandedPlanes(p => ({ ...p, [sat.plane]: true }));
+      }
+    } else {
+      if (selectedItem?.type === 'satellite') {
+        setSelectedItem(null);
+      }
+    }
+  }, [focusedSatelliteId, scenario]);
 
   if (!isOpen) return null;
 
@@ -24,27 +52,237 @@ export const OutlinerPanel: React.FC<OutlinerPanelProps> = ({
     });
   };
 
-  const currentRaan = settings?.planeRaanMap?.[selectedPlane] ?? 0;
-  const currentPhase = settings?.planePhaseMap?.[selectedPlane] ?? 0;
-
-  const handleRaanChange = (val: number) => {
+  const handleRaanChange = (planeId: number, val: number) => {
     onChangeSettings({
       ...settings,
       planeRaanMap: {
         ...(settings?.planeRaanMap || {}),
-        [selectedPlane]: val
+        [planeId]: val
       }
     });
   };
 
-  const handlePhaseChange = (val: number) => {
+  const handlePhaseChange = (planeId: number, val: number) => {
     onChangeSettings({
       ...settings,
       planePhaseMap: {
         ...(settings?.planePhaseMap || {}),
-        [selectedPlane]: val
+        [planeId]: val
       }
     });
+  };
+
+  const handleTogglePlaneVisibility = (planeNum: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const isCurrentlyHidden = !!settings.hiddenPlanes?.[planeNum];
+    onChangeSettings({
+      ...settings,
+      hiddenPlanes: {
+        ...(settings.hiddenPlanes || {}),
+        [planeNum]: !isCurrentlyHidden
+      }
+    });
+  };
+
+  const handleToggleSatVisibility = (satId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const isCurrentlyHidden = !!settings.hiddenSatellites?.[satId];
+    onChangeSettings({
+      ...settings,
+      hiddenSatellites: {
+        ...(settings.hiddenSatellites || {}),
+        [satId]: !isCurrentlyHidden
+      }
+    });
+  };
+
+  const handleToggleGatewaysGroupVisibility = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const isCurrentlyHidden = settings.showGateways === false;
+    updateSetting('showGateways', isCurrentlyHidden);
+  };
+
+  const handleToggleGatewayVisibility = (gwId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const isCurrentlyHidden = !!settings.hiddenGateways?.[gwId];
+    onChangeSettings({
+      ...settings,
+      hiddenGateways: {
+        ...(settings.hiddenGateways || {}),
+        [gwId]: !isCurrentlyHidden
+      }
+    });
+  };
+
+  const formatNodesCount = (count: number) => {
+    const mod10 = count % 10;
+    const mod100 = count % 100;
+    let word = 'узлов';
+    if (mod100 < 11 || mod100 > 19) {
+      if (mod10 === 1) word = 'узел';
+      else if (mod10 >= 2 && mod10 <= 4) word = 'узла';
+    }
+    return `${count} ${word}`;
+  };
+
+  const formatGatewaysCount = (count: number) => {
+    const mod10 = count % 10;
+    const mod100 = count % 100;
+    let word = 'шлюзов';
+    if (mod100 < 11 || mod100 > 19) {
+      if (mod10 === 1) word = 'шлюз';
+      else if (mod10 >= 2 && mod10 <= 4) word = 'шлюза';
+    }
+    return `${count} ${word}`;
+  };
+
+  const planes = React.useMemo(() => {
+    if (scenario?.satellites && scenario.satellites.length > 0) {
+      const planeSet = new Set<number>();
+      scenario.satellites.forEach(s => {
+        if (typeof s.plane === 'number') {
+          planeSet.add(s.plane);
+        }
+      });
+      if (planeSet.size > 0) {
+        return Array.from(planeSet).sort((a, b) => a - b);
+      }
+    }
+    return [1, 2, 3, 4, 5, 6];
+  }, [scenario?.satellites]);
+  
+  const TreeItem: React.FC<{
+    label: React.ReactNode;
+    icon?: React.ReactNode;
+    badge?: React.ReactNode;
+    isSelected: boolean;
+    onClick: () => void;
+    onExpand?: () => void;
+    isExpanded?: boolean;
+    level?: number;
+    hasChildren?: boolean;
+    isVisible?: boolean;
+    onToggleVisibility?: (e: React.MouseEvent) => void;
+  }> = ({
+    label,
+    icon,
+    badge,
+    isSelected,
+    onClick,
+    onExpand,
+    isExpanded,
+    level = 0,
+    hasChildren,
+    isVisible = true,
+    onToggleVisibility
+  }) => {
+    const [isHovered, setIsHovered] = useState(false);
+
+    return (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          padding: `4px 8px 4px ${8 + level * 12}px`,
+          cursor: 'pointer',
+          backgroundColor: isSelected ? '#1473e640' : isHovered ? '#2a2a2a' : 'transparent',
+          borderLeft: isSelected ? '2px solid #1473e6' : '2px solid transparent',
+          color: isVisible ? (isSelected ? '#fff' : '#ccc') : '#666',
+          userSelect: 'none',
+          transition: 'background-color 0.15s ease'
+        }}
+        onClick={onClick}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        <div
+          style={{
+            width: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginRight: '4px',
+            flexShrink: 0
+          }}
+          onClick={(e) => {
+            if (hasChildren && onExpand) {
+              e.stopPropagation();
+              onExpand();
+            }
+          }}
+        >
+          {hasChildren ? (
+            isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />
+          ) : null}
+        </div>
+        {icon && (
+          <div
+            style={{
+              marginRight: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              flexShrink: 0,
+              opacity: isVisible ? 1 : 0.4
+            }}
+          >
+            {icon}
+          </div>
+        )}
+        <span
+          style={{
+            fontSize: '11px',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            flex: 1,
+            textDecoration: !isVisible ? 'line-through' : 'none',
+            opacity: isVisible ? 1 : 0.6
+          }}
+        >
+          {label}
+        </span>
+        {badge !== undefined && badge !== null && (
+          <span
+            style={{
+              fontSize: '11px',
+              color: isSelected ? '#a5d8ff' : '#777777',
+              marginRight: '6px',
+              flexShrink: 0,
+              fontWeight: 500,
+              userSelect: 'none'
+            }}
+          >
+            {badge}
+          </span>
+        )}
+        {onToggleVisibility && (
+          <button
+            type="button"
+            title={isVisible ? 'Скрыть с 3D сцены' : 'Показать на 3D сцене'}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleVisibility(e);
+            }}
+            style={{
+              background: isVisible ? 'transparent' : '#ff4d4f20',
+              border: isVisible ? '1px solid transparent' : '1px solid #ff4d4f40',
+              padding: '2px 4px',
+              marginLeft: '4px',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: isVisible ? (isHovered ? '#00f0ff' : '#777') : '#ff4d4f',
+              opacity: isVisible ? (isHovered ? 1 : 0.5) : 1,
+              transition: 'all 0.15s ease'
+            }}
+          >
+            {isVisible ? <Eye size={13} /> : <EyeOff size={13} />}
+          </button>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -58,385 +296,419 @@ export const OutlinerPanel: React.FC<OutlinerPanelProps> = ({
       color: '#e0e0e0',
       fontSize: '12px',
       height: 'calc(100vh - 48px)',
-      overflowY: 'auto',
       zIndex: 90,
       boxShadow: '-4px 0 16px rgba(0,0,0,0.35)'
     }}>
-      {/* Header */}
+      {/* Top Section: Outliner */}
       <div style={{
-        padding: '10px 14px',
-        borderBottom: '1px solid #383838',
-        backgroundColor: '#202020',
+        flex: '1 1 50%',
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        fontWeight: 600
+        flexDirection: 'column',
+        borderBottom: '1px solid #1473e6',
+        overflow: 'hidden'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <div style={{
+          padding: '10px 14px',
+          borderBottom: '1px solid #383838',
+          backgroundColor: '#202020',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          fontWeight: 600
+        }}>
           <Layers size={14} style={{ color: '#1473e6' }} />
-          <span>Аутлайнер элементов</span>
+          <span>Аутлайнер объектов</span>
         </div>
-        <span style={{ fontSize: '11px', color: '#888' }}>Слои UI</span>
+        
+        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+          <TreeItem 
+            label="Наземные шлюзы" 
+            badge={scenario?.gateways?.length || 0}
+            icon={<MapPin size={12} />}
+            isSelected={selectedItem?.type === 'gateway' && selectedItem?.id === 'all'}
+            onClick={() => setGatewaysExpanded(!gatewaysExpanded)}
+            onExpand={() => setGatewaysExpanded(!gatewaysExpanded)}
+            isExpanded={gatewaysExpanded}
+            hasChildren={(scenario?.gateways?.length || 0) > 0}
+            isVisible={settings.showGateways !== false}
+            onToggleVisibility={handleToggleGatewaysGroupVisibility}
+          />
+          {gatewaysExpanded && scenario?.gateways?.map(g => (
+             <TreeItem 
+               key={g.id}
+               label={g.name}
+               level={1}
+               isSelected={selectedItem?.type === 'gateway' && selectedItem?.id === g.id}
+               onClick={() => setSelectedItem({ type: 'gateway', id: g.id })}
+               isVisible={settings.showGateways !== false && !settings.hiddenGateways?.[g.id]}
+               onToggleVisibility={(e) => handleToggleGatewayVisibility(g.id, e)}
+             />
+          ))}
+
+          {planes.map(pNum => {
+            const isExpanded = expandedPlanes[pNum];
+            const planeSats = scenario?.satellites?.filter(s => s.plane === pNum) || [];
+            const isPlaneHidden = !!settings.hiddenPlanes?.[pNum];
+            
+            return (
+              <React.Fragment key={pNum}>
+                <TreeItem 
+                  label={`Плоскость ${pNum}`} 
+                  badge={planeSats.length}
+                  icon={<RadioReceiver size={12} />}
+                  isSelected={selectedItem?.type === 'plane' && selectedItem?.id === pNum}
+                  onClick={() => setSelectedItem({ type: 'plane', id: pNum })}
+                  onExpand={() => setExpandedPlanes(prev => ({ ...prev, [pNum]: !isExpanded }))}
+                  isExpanded={isExpanded}
+                  hasChildren={planeSats.length > 0}
+                  isVisible={!isPlaneHidden}
+                  onToggleVisibility={(e) => handleTogglePlaneVisibility(pNum, e)}
+                />
+                {isExpanded && planeSats.map(sat => {
+                  const isSatIndividuallyHidden = !!settings.hiddenSatellites?.[sat.id];
+                  const isSatVisible = !isPlaneHidden && !isSatIndividuallyHidden;
+
+                  return (
+                    <TreeItem 
+                      key={sat.id}
+                      label={`Спутник ${sat.id}`}
+                      level={1}
+                      isSelected={selectedItem?.type === 'satellite' && selectedItem?.id === sat.id}
+                      onClick={() => {
+                        setSelectedItem({ type: 'satellite', id: sat.id });
+                        if (onSelectSatellite) onSelectSatellite(sat);
+                      }}
+                      isVisible={isSatVisible}
+                      onToggleVisibility={(e) => handleToggleSatVisibility(sat.id, e)}
+                    />
+                  );
+                })}
+              </React.Fragment>
+            );
+          })}
+        </div>
       </div>
 
-      <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        
-        {/* NEW SECTION: RAAN & Phase Sliders */}
+      {/* Bottom Section: Settings & Data */}
+      <div style={{
+        flex: '1 1 50%',
+        overflowY: 'auto',
+        display: 'flex',
+        flexDirection: 'column',
+        backgroundColor: '#1e1e1e'
+      }}>
         <div style={{
-          backgroundColor: '#192231',
-          border: '1px solid #1473e650',
-          borderRadius: '6px',
-          padding: '12px',
+          padding: '10px 14px',
+          borderBottom: '1px solid #383838',
+          backgroundColor: '#191919',
           display: 'flex',
-          flexDirection: 'column',
-          gap: '10px'
+          alignItems: 'center',
+          fontWeight: 600,
+          color: '#aaa',
+          fontSize: '11px'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#1473e6', fontWeight: 600 }}>
-            <Compass size={14} />
-            <span>Управление RAAN & Фазированием</span>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-            <span style={{ color: '#aaa', fontSize: '11px' }}>Плоскость:</span>
-            <select
-              value={selectedPlane}
-              onChange={(e) => setSelectedPlane(parseInt(e.target.value))}
-              style={{
-                backgroundColor: '#141414',
-                color: '#fff',
-                border: '1px solid #3d3d3d',
-                borderRadius: '4px',
-                padding: '3px 8px',
-                fontSize: '11px',
-                outline: 'none',
-                cursor: 'pointer'
-              }}
-            >
-              {[1, 2, 3, 4, 5, 6].map(p => (
-                <option key={p} value={p}>Плоскость P{p}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* 1. RAAN Slider */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#e0e0e0' }}>
-              <span><b>1. RAAN (Поворот вокруг Земли):</b></span>
-              <span style={{ color: '#1473e6', fontWeight: 'bold' }}>{currentRaan}°</span>
-            </div>
-            <p style={{ fontSize: '10px', color: '#888', margin: 0 }}>
-              Поворачивает всё кольцо орбиты вокруг оси Земли (изменяет регион пролета).
-            </p>
-            <input
-              type="range"
-              min="0"
-              max="360"
-              step="1"
-              value={currentRaan}
-              onChange={(e) => handleRaanChange(parseFloat(e.target.value))}
-              style={sliderStyle}
-            />
-          </div>
-
-          {/* 2. Phase Slider */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#e0e0e0' }}>
-              <span><b>2. Фазирование (Сдвиг бусин):</b></span>
-              <span style={{ color: '#00ff88', fontWeight: 'bold' }}>{currentPhase}°</span>
-            </div>
-            <p style={{ fontSize: '10px', color: '#888', margin: 0 }}>
-              Сдвигает спутники вдоль неподвижного кольца (шахматный порядок для закрытия «дыр»).
-            </p>
-            <input
-              type="range"
-              min="0"
-              max="360"
-              step="1"
-              value={currentPhase}
-              onChange={(e) => handlePhaseChange(parseFloat(e.target.value))}
-              style={{ ...sliderStyle, accentColor: '#00ff88' }}
-            />
-          </div>
+          {selectedItem?.type === 'plane' && `НАСТРОЙКИ ПЛОСКОСТИ P${selectedItem.id}`}
+          {selectedItem?.type === 'satellite' && `ДАННЫЕ СПУТНИКА ${selectedItem.id}`}
+          {selectedItem?.type === 'gateway' && `ДАННЫЕ ШЛЮЗА`}
+          {!selectedItem && 'СВОЙСТВА ОБЪЕКТА'}
         </div>
 
-        {/* Layer Visibility Section */}
-        <div style={sectionStyle}>
-          <div style={sectionHeaderStyle}>
-            <Eye size={14} />
-            <span>Отображение слоев</span>
-          </div>
-
-          <div style={checkboxGroupStyle}>
-            <ToggleRow
-              label="Орбитальные траектории"
-              checked={settings.showOrbits}
-              onChange={(val) => updateSetting('showOrbits', val)}
-            />
-            <ToggleRow
-              label="Спутники группировки (S01..S48)"
-              checked={settings.showSatellites}
-              onChange={(val) => updateSetting('showSatellites', val)}
-            />
-            <ToggleRow
-              label="Наземные шлюзы (C65, Murmansk...)"
-              checked={settings.showGateways}
-              onChange={(val) => updateSetting('showGateways', val)}
-            />
-            <ToggleRow
-              label="Межспутниковые линии (ISL)"
-              checked={settings.showISL}
-              onChange={(val) => updateSetting('showISL', val)}
-            />
-            <ToggleRow
-              label="Связь спутник - Земля"
-              checked={settings.showSatLinks}
-              onChange={(val) => updateSetting('showSatLinks', val)}
-            />
-            <ToggleRow
-              label="Текстовые подписи объектов"
-              checked={settings.showLabels}
-              onChange={(val) => updateSetting('showLabels', val)}
-            />
-            <ToggleRow
-              label="Атмосфера планеты"
-              checked={settings.showAtmosphere}
-              onChange={(val) => updateSetting('showAtmosphere', val)}
-            />
-            <ToggleRow
-              label="Зоны покрытия КА (FOVs)"
-              checked={!!settings.showCoverageHeatmap}
-              onChange={(val) => updateSetting('showCoverageHeatmap', val)}
-            />
-            <ToggleRow
-              label="Загрузка и трафик ISL (%)"
-              checked={!!settings.showTrafficLoad}
-              onChange={(val) => updateSetting('showTrafficLoad', val)}
-            />
-            <ToggleRow
-              label="Дистанции между КА (км)"
-              checked={settings.showDistances !== false}
-              onChange={(val) => updateSetting('showDistances', val)}
-            />
-          </div>
-        </div>
-
-        {/* Dynamic Sliders Section */}
-        <div style={sectionStyle}>
-          <div style={sectionHeaderStyle}>
-            <Sliders size={14} />
-            <span>Параметры рендеринга</span>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <ToggleRow
-              label="Свечение спутников (Glow)"
-              checked={settings.satGlow}
-              onChange={(val) => updateSetting('satGlow', val)}
-            />
-
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', color: '#aaa' }}>
-                <span>Размер спутников</span>
-                <span>{settings.satSize.toFixed(1)}x</span>
+        <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          
+          {!selectedItem && (
+            <div style={{
+              padding: '24px 16px',
+              textAlign: 'center',
+              color: '#888',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '10px'
+            }}>
+              <Layers size={24} style={{ color: '#555' }} />
+              <div style={{ fontSize: '12px', fontWeight: 600, color: '#bbb' }}>Объект не выбран</div>
+              <div style={{ fontSize: '11px', color: '#777', lineHeight: '1.4' }}>
+                Выберите плоскость орбит, спутник или наземный шлюз в дереве выше для просмотра телеметрии и управления.
               </div>
-              <input
-                type="range"
-                min="0.5"
-                max="3.0"
-                step="0.1"
-                value={settings.satSize}
-                onChange={(e) => updateSetting('satSize', parseFloat(e.target.value))}
-                style={sliderStyle}
-              />
             </div>
+          )}
 
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', color: '#aaa' }}>
-                <span>Прозрачность орбит</span>
-                <span>{Math.round(settings.orbitOpacity * 100)}%</span>
-              </div>
-              <input
-                type="range"
-                min="0.1"
-                max="1.0"
-                step="0.05"
-                value={settings.orbitOpacity}
-                onChange={(e) => updateSetting('orbitOpacity', parseFloat(e.target.value))}
-                style={sliderStyle}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Simulation Step Controls */}
-        <div style={sectionStyle}>
-          <div style={sectionHeaderStyle}>
-            <Clock size={14} />
-            <span>Настройка шага расчета</span>
-          </div>
-
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', color: '#aaa' }}>
-              <span>Шаг времени (dt):</span>
-              <span style={{ color: '#1473e6', fontWeight: 600 }}>{settings.stepSeconds} сек</span>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '4px' }}>
-              {[1, 5, 10, 60, 300].map(step => (
+          {selectedItem && selectedItem.type === 'plane' && (
+            <div style={{
+              backgroundColor: '#192231',
+              border: '1px solid #1473e650',
+              borderRadius: '6px',
+              padding: '12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#1473e6', fontWeight: 600 }}>
+                  <Compass size={14} />
+                  <span>Плоскость P{selectedItem.id}</span>
+                </div>
                 <button
-                  key={step}
-                  onClick={() => updateSetting('stepSeconds', step)}
+                  type="button"
+                  onClick={(e) => handleTogglePlaneVisibility(selectedItem.id, e)}
                   style={{
-                    padding: '4px 0',
-                    backgroundColor: settings.stepSeconds === step ? '#1473e6' : '#323232',
-                    color: settings.stepSeconds === step ? '#fff' : '#b0b0b0',
-                    border: '1px solid #444',
-                    borderRadius: '3px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '3px 8px',
                     fontSize: '11px',
-                    cursor: 'pointer'
+                    backgroundColor: !settings.hiddenPlanes?.[selectedItem.id] ? '#1473e625' : '#ff4d4f20',
+                    color: !settings.hiddenPlanes?.[selectedItem.id] ? '#00f0ff' : '#ff4d4f',
+                    border: `1px solid ${!settings.hiddenPlanes?.[selectedItem.id] ? '#1473e660' : '#ff4d4f60'}`,
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
                   }}
+                  title={!settings.hiddenPlanes?.[selectedItem.id] ? 'Скрыть плоскость и её спутники' : 'Показать плоскость'}
                 >
-                  {step >= 60 ? `${step / 60}м` : `${step}с`}
+                  {!settings.hiddenPlanes?.[selectedItem.id] ? <Eye size={12} /> : <EyeOff size={12} />}
+                  <span>{!settings.hiddenPlanes?.[selectedItem.id] ? 'Видима' : 'Скрыта'}</span>
                 </button>
-              ))}
+              </div>
+
+              {/* Node statistics block */}
+              {(() => {
+                const planeSats = scenario?.satellites?.filter(s => s.plane === selectedItem.id) || [];
+                const isPlaneHidden = !!settings.hiddenPlanes?.[selectedItem.id];
+                const hiddenCount = planeSats.filter(s => !!settings.hiddenSatellites?.[s.id]).length;
+                const visibleCount = isPlaneHidden ? 0 : planeSats.length - hiddenCount;
+
+                return (
+                  <div style={{
+                    backgroundColor: 'rgba(20, 115, 230, 0.12)',
+                    border: '1px solid rgba(20, 115, 230, 0.25)',
+                    borderRadius: '6px',
+                    padding: '8px 10px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: '#aaa', fontSize: '11px' }}>Узлов (спутников) на орбите:</span>
+                      <span style={{ color: '#00f0ff', fontWeight: 700, fontSize: '12px' }}>
+                        {formatNodesCount(planeSats.length)}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px' }}>
+                      <span style={{ color: '#888' }}>Видимость на 3D сцене:</span>
+                      <span style={{ color: visibleCount > 0 ? '#00ff88' : '#ff4d4f', fontWeight: 600 }}>
+                        {visibleCount} из {planeSats.length}
+                      </span>
+                    </div>
+                    {planeSats.length > 0 && (
+                      <div style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: '4px',
+                        marginTop: '2px',
+                        paddingTop: '6px',
+                        borderTop: '1px solid rgba(255,255,255,0.06)'
+                      }}>
+                        {planeSats.map(s => {
+                          const isSatHidden = isPlaneHidden || !!settings.hiddenSatellites?.[s.id];
+                          return (
+                            <span
+                              key={s.id}
+                              onClick={() => {
+                                setSelectedItem({ type: 'satellite', id: s.id });
+                                if (onSelectSatellite) onSelectSatellite(s);
+                              }}
+                              style={{
+                                fontSize: '10px',
+                                fontFamily: 'monospace',
+                                padding: '2px 6px',
+                                borderRadius: '3px',
+                                backgroundColor: isSatHidden ? 'rgba(255,255,255,0.05)' : 'rgba(20, 115, 230, 0.25)',
+                                color: isSatHidden ? '#777' : '#93c5fd',
+                                border: isSatHidden ? '1px solid #444' : '1px solid rgba(20, 115, 230, 0.4)',
+                                cursor: 'pointer',
+                                textDecoration: isSatHidden ? 'line-through' : 'none',
+                                transition: 'all 0.15s ease'
+                              }}
+                              title={`Перейти к узлу ${s.id}`}
+                            >
+                              {s.id}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* 1. RAAN Slider */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#e0e0e0' }}>
+                  <span><b>1. RAAN (Поворот вокруг Земли):</b></span>
+                  <span style={{ color: '#1473e6', fontWeight: 'bold' }}>{settings?.planeRaanMap?.[selectedItem.id] ?? 0}°</span>
+                </div>
+                <p style={{ fontSize: '10px', color: '#888', margin: 0 }}>
+                  Поворачивает всё кольцо орбиты вокруг оси Земли.
+                </p>
+                <input
+                  type="range"
+                  min="0"
+                  max="360"
+                  step="1"
+                  value={settings?.planeRaanMap?.[selectedItem.id] ?? 0}
+                  onChange={(e) => handleRaanChange(selectedItem.id, parseFloat(e.target.value))}
+                  style={sliderStyle}
+                />
+              </div>
+
+              {/* 2. Phase Slider */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#e0e0e0' }}>
+                  <span><b>2. Фазирование (Сдвиг бусин):</b></span>
+                  <span style={{ color: '#00ff88', fontWeight: 'bold' }}>{settings?.planePhaseMap?.[selectedItem.id] ?? 0}°</span>
+                </div>
+                <p style={{ fontSize: '10px', color: '#888', margin: 0 }}>
+                  Сдвигает спутники вдоль неподвижного кольца (шахматный порядок).
+                </p>
+                <input
+                  type="range"
+                  min="0"
+                  max="360"
+                  step="1"
+                  value={settings?.planePhaseMap?.[selectedItem.id] ?? 0}
+                  onChange={(e) => handlePhaseChange(selectedItem.id, parseFloat(e.target.value))}
+                  style={{ ...sliderStyle, accentColor: '#00ff88' }}
+                />
+              </div>
             </div>
-          </div>
+          )}
+
+          {selectedItem && selectedItem.type === 'satellite' && (() => {
+            const sat = scenario?.satellites?.find(s => s.id === selectedItem.id);
+            if (!sat) return <div style={{ color: '#888' }}>Нет данных</div>;
+            const isSatVisible = !settings.hiddenPlanes?.[sat.plane] && !settings.hiddenSatellites?.[sat.id];
+
+            return (
+              <div style={sectionStyle}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '6px', borderBottom: '1px solid #333' }}>
+                    <span style={{ color: '#aaa', fontSize: '11px' }}>Отображение на 3D сцене</span>
+                    <button
+                      type="button"
+                      onClick={(e) => handleToggleSatVisibility(sat.id, e)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '3px 8px',
+                        fontSize: '11px',
+                        backgroundColor: isSatVisible ? '#1473e625' : '#ff4d4f20',
+                        color: isSatVisible ? '#00f0ff' : '#ff4d4f',
+                        border: `1px solid ${isSatVisible ? '#1473e660' : '#ff4d4f60'}`,
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                      title={isSatVisible ? 'Скрыть спутник с 3D сцены' : 'Показать спутник на 3D сцене'}
+                    >
+                      {isSatVisible ? <Eye size={12} /> : <EyeOff size={12} />}
+                      <span>{isSatVisible ? 'Видим' : 'Скрыт'}</span>
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#aaa' }}>ID</span>
+                    <span style={{ color: '#fff', fontWeight: 600 }}>{sat.id}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#aaa' }}>Плоскость</span>
+                    <span style={{ color: '#fff' }}>P{sat.plane}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#aaa' }}>Наклонение</span>
+                    <span style={{ color: '#fff' }}>{sat.inc}°</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#aaa' }}>Высота</span>
+                    <span style={{ color: '#fff' }}>{sat.altitude} км</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#aaa' }}>Температура</span>
+                    <span style={{ color: (sat.temperature_c || 0) > 60 ? '#ff3b30' : '#00ff88' }}>
+                      {sat.temperature_c ?? 20}°C
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#aaa' }}>Топливо</span>
+                    <span style={{ color: (sat.fuel_pct || 100) < 30 ? '#ff9900' : '#00ff88' }}>
+                      {sat.fuel_pct ?? 100}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {selectedItem && selectedItem.type === 'gateway' && (() => {
+            const gw = scenario?.gateways?.find(g => g.id === selectedItem.id);
+            if (!gw) return <div style={{ color: '#888' }}>Нет данных</div>;
+            const isGwVisible = settings.showGateways !== false && !settings.hiddenGateways?.[gw.id];
+
+            return (
+              <div style={sectionStyle}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '6px', borderBottom: '1px solid #333' }}>
+                    <span style={{ color: '#aaa', fontSize: '11px' }}>Отображение на 3D сцене</span>
+                    <button
+                      type="button"
+                      onClick={(e) => handleToggleGatewayVisibility(gw.id, e)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '3px 8px',
+                        fontSize: '11px',
+                        backgroundColor: isGwVisible ? '#1473e625' : '#ff4d4f20',
+                        color: isGwVisible ? '#00f0ff' : '#ff4d4f',
+                        border: `1px solid ${isGwVisible ? '#1473e660' : '#ff4d4f60'}`,
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                      title={isGwVisible ? 'Скрыть шлюз' : 'Показать шлюз'}
+                    >
+                      {isGwVisible ? <Eye size={12} /> : <EyeOff size={12} />}
+                      <span>{isGwVisible ? 'Видим' : 'Скрыт'}</span>
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#aaa' }}>Название</span>
+                    <span style={{ color: '#fff', fontWeight: 600 }}>{gw.name}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#aaa' }}>Координаты</span>
+                    <span style={{ color: '#fff' }}>{gw.lat.toFixed(2)}°, {gw.lon.toFixed(2)}°</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#aaa' }}>Тип</span>
+                    <span style={{ color: '#fff' }}>{gw.type || 'Шлюз'}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#aaa' }}>Купол досягаемости</span>
+                    <span style={{ color: settings.showGatewayCoverage !== false ? '#00d084' : '#888' }}>
+                      {settings.showGatewayCoverage !== false ? '20% непрозрачность' : 'Скрыт'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
         </div>
-
-        {/* Custom Color Settings per Element */}
-        <div style={sectionStyle}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <div style={sectionHeaderStyle}>
-              <Palette size={14} />
-              <span style={{ margin: 0 }}>Настройка цветов объектов</span>
-            </div>
-            <button
-              onClick={() => onChangeSettings({
-                ...settings,
-                satColor: '#00f0ff',
-                offlineSatColor: '#ff3b30',
-                highLatencySatColor: '#ff9900',
-                orbitColor: '#1473e6',
-                islColor: '#00ff88',
-                gatewayColor: '#00d084',
-                groundLinkColor: '#f59e0b',
-                atmosphereColor: '#1e3a8a',
-                fovConeColor: '#00f0ff'
-              })}
-              style={{
-                backgroundColor: 'transparent',
-                border: 'none',
-                color: '#1473e6',
-                fontSize: '10px',
-                cursor: 'pointer',
-                textDecoration: 'underline'
-              }}
-            >
-              Сброс
-            </button>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <ColorPickerRow
-              label="Активные спутники"
-              value={settings.satColor || '#00f0ff'}
-              onChange={(val) => updateSetting('satColor', val)}
-            />
-            <ColorPickerRow
-              label="Отказавшие спутники"
-              value={settings.offlineSatColor || '#ff3b30'}
-              onChange={(val) => updateSetting('offlineSatColor', val)}
-            />
-            <ColorPickerRow
-              label="Спутники с задержкой"
-              value={settings.highLatencySatColor || '#ff9900'}
-              onChange={(val) => updateSetting('highLatencySatColor', val)}
-            />
-            <ColorPickerRow
-              label="Траектории орбит"
-              value={settings.orbitColor || '#1473e6'}
-              onChange={(val) => updateSetting('orbitColor', val)}
-            />
-            <ColorPickerRow
-              label="Межспутниковая связь (ISL)"
-              value={settings.islColor || '#00ff88'}
-              onChange={(val) => updateSetting('islColor', val)}
-            />
-            <ColorPickerRow
-              label="Наземные шлюзы"
-              value={settings.gatewayColor || '#00d084'}
-              onChange={(val) => updateSetting('gatewayColor', val)}
-            />
-            <ColorPickerRow
-              label="Связь Земля - КА"
-              value={settings.groundLinkColor || '#f59e0b'}
-              onChange={(val) => updateSetting('groundLinkColor', val)}
-            />
-            <ColorPickerRow
-              label="Атмосфера Земли"
-              value={settings.atmosphereColor || '#1e3a8a'}
-              onChange={(val) => updateSetting('atmosphereColor', val)}
-            />
-            <ColorPickerRow
-              label="Зоны покрытия (FOV)"
-              value={settings.fovConeColor || '#00f0ff'}
-              onChange={(val) => updateSetting('fovConeColor', val)}
-            />
-          </div>
-        </div>
-
       </div>
     </aside>
   );
 };
-
-const ToggleRow: React.FC<{ label: string; checked: boolean; onChange: (v: boolean) => void }> = ({
-  label, checked, onChange
-}) => (
-  <label style={{
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    cursor: 'pointer',
-    padding: '3px 0'
-  }}>
-    <span style={{ color: checked ? '#e0e0e0' : '#888' }}>{label}</span>
-    <input
-      type="checkbox"
-      checked={checked}
-      onChange={(e) => onChange(e.target.checked)}
-      style={{ accentColor: '#1473e6', cursor: 'pointer' }}
-    />
-  </label>
-);
-
-const ColorPickerRow: React.FC<{
-  label: string;
-  value: string;
-  onChange: (val: string) => void;
-}> = ({ label, value, onChange }) => (
-  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 0' }}>
-    <span style={{ color: '#aaa', fontSize: '11px' }}>{label}</span>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-      <input
-        type="color"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{
-          width: '24px',
-          height: '22px',
-          padding: 0,
-          border: '1px solid #444',
-          borderRadius: '3px',
-          backgroundColor: 'transparent',
-          cursor: 'pointer'
-        }}
-      />
-      <span style={{ fontSize: '10px', color: '#777', fontFamily: 'monospace', width: '52px', textAlign: 'right' }}>
-        {value.toUpperCase()}
-      </span>
-    </div>
-  </div>
-);
 
 const sectionStyle: React.CSSProperties = {
   backgroundColor: '#1f1f1f',
@@ -445,24 +717,9 @@ const sectionStyle: React.CSSProperties = {
   padding: '10px'
 };
 
-const sectionHeaderStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '6px',
-  fontWeight: 600,
-  color: '#cccccc',
-  marginBottom: '10px',
-  fontSize: '12px'
-};
-
-const checkboxGroupStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '6px'
-};
-
 const sliderStyle: React.CSSProperties = {
   width: '100%',
   accentColor: '#1473e6',
   cursor: 'pointer'
 };
+

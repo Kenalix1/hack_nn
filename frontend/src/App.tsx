@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Header } from './components/Header';
 import { OutlinerPanel } from './components/OutlinerPanel';
+import { GlobalSettingsMenu } from './components/GlobalSettingsMenu';
 import { ThreeCanvas } from './components/ThreeCanvas';
 import { DraggableWindow } from './components/DraggableWindow';
 import { AnalyticsModal } from './components/AnalyticsModal';
@@ -39,6 +40,7 @@ const defaultOutlinerSettings: OutlinerSettings = {
   showOrbits: true,
   showSatellites: true,
   showGateways: true,
+  showGatewayCoverage: true,
   showISL: true,
   showSatLinks: true,
   showLabels: true,
@@ -58,7 +60,10 @@ const defaultOutlinerSettings: OutlinerSettings = {
   atmosphereColor: '#1e3a8a',
   fovConeColor: '#00f0ff',
   planeRaanMap: {},
-  planePhaseMap: {}
+  planePhaseMap: {},
+  hiddenPlanes: {},
+  hiddenSatellites: {},
+  hiddenGateways: {}
 };
 
 const defaultWindows = {
@@ -102,6 +107,9 @@ export const App: React.FC = () => {
       ...saved,
       planeRaanMap: saved.planeRaanMap || {},
       planePhaseMap: saved.planePhaseMap || {},
+      hiddenPlanes: saved.hiddenPlanes || {},
+      hiddenSatellites: saved.hiddenSatellites || {},
+      hiddenGateways: saved.hiddenGateways || {},
       satColor: saved.satColor || '#00f0ff',
       offlineSatColor: saved.offlineSatColor || '#ff3b30',
       highLatencySatColor: saved.highLatencySatColor || '#ff9900',
@@ -478,9 +486,14 @@ export const App: React.FC = () => {
   };
 
   // Satellite Outages Handlers & Fly-to Focus
-  const handleSelectSatellite = (sat: Satellite) => {
-    setSelectedSatellite(sat);
+  const handleSelectSatellite = (sat: Satellite | null) => {
+    if (!sat) {
+      setFocusedSatelliteId(null);
+      setSelectedSatellite(null);
+      return;
+    }
     setFocusedSatelliteId(sat.id);
+    setSelectedSatellite(sat);
     addLog(`Камера сфокусирована на спутнике [${sat.id}]. Отображается 3D-конус угла обзора (10°)`, 'info');
   };
 
@@ -690,34 +703,40 @@ export const App: React.FC = () => {
       />
 
       <div style={{ flex: 1, position: 'relative', display: 'flex', overflow: 'hidden' }}>
-        {focusedSatelliteId && (
-          <button
-            onClick={() => setFocusedSatelliteId(null)}
-            style={{
-              position: 'absolute',
-              top: '16px',
-              left: '16px',
-              zIndex: 85,
-              backgroundColor: '#1473e6',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: '4px',
-              padding: '6px 12px',
-              fontSize: '12px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
-            }}
-          >
-            <RotateCcw size={14} />
-            <span>Сбросить фокус камеры (Вся Земля)</span>
-          </button>
-        )}
+        <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+          <GlobalSettingsMenu
+            settings={outlinerSettings}
+            onChangeSettings={setOutlinerSettings}
+          />
 
-        <div style={{ flex: 1, position: 'relative' }}>
+          {focusedSatelliteId && (
+            <button
+              onClick={() => setFocusedSatelliteId(null)}
+              style={{
+                position: 'absolute',
+                top: '16px',
+                left: '68px',
+                zIndex: 86,
+                backgroundColor: '#1473e6',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '7px 12px',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                boxShadow: '0 4px 14px rgba(0,0,0,0.5)',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <RotateCcw size={14} />
+              <span>Сбросить фокус камеры (Вся Земля)</span>
+            </button>
+          )}
+
           <CriticalSatellitesAlertBar
             scenario={scenarioData}
             currentTimeSeconds={currentTimeSeconds}
@@ -731,20 +750,22 @@ export const App: React.FC = () => {
             focusedSatelliteId={focusedSatelliteId}
             onSelectSatellite={handleSelectSatellite}
           />
+          <TimelineBar
+            currentTime={currentTimeSeconds}
+            maxTime={86400}
+            stepSeconds={outlinerSettings.stepSeconds}
+            onChangeStep={(s) => setOutlinerSettings(prev => ({ ...prev, stepSeconds: s }))}
+            onChangeTime={setCurrentTimeSeconds}
+          />
         </div>
 
         <OutlinerPanel
           settings={outlinerSettings}
           onChangeSettings={setOutlinerSettings}
           isOpen={isSidebarOpen}
-        />
-
-        <TimelineBar
-          currentTime={currentTimeSeconds}
-          maxTime={86400}
-          stepSeconds={outlinerSettings.stepSeconds}
-          onChangeStep={(s) => setOutlinerSettings(prev => ({ ...prev, stepSeconds: s }))}
-          onChangeTime={setCurrentTimeSeconds}
+          scenario={scenarioData}
+          focusedSatelliteId={focusedSatelliteId}
+          onSelectSatellite={handleSelectSatellite}
         />
 
         <SatelliteOutageModal

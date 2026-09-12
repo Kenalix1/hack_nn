@@ -127,6 +127,7 @@ export interface OutlinerSettings {
   showOrbits: boolean;
   showSatellites: boolean;
   showGateways: boolean;
+  showGatewayCoverage?: boolean;
   showISL: boolean;
   showSatLinks: boolean;
   showLabels: boolean;
@@ -150,6 +151,9 @@ export interface OutlinerSettings {
   fovConeColor: string;
   planeRaanMap: Record<number, number>;
   planePhaseMap: Record<number, number>;
+  hiddenPlanes?: Record<number, boolean>;
+  hiddenSatellites?: Record<string, boolean>;
+  hiddenGateways?: Record<string, boolean>;
 }
 
 export interface WindowState {
