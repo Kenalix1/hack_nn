@@ -127,6 +127,7 @@ export interface OutlinerSettings {
   showOrbits: boolean;
   showSatellites: boolean;
   showGateways: boolean;
+  showGatewayCoverage?: boolean;
   showISL: boolean;
   showSatLinks: boolean;
   showLabels: boolean;

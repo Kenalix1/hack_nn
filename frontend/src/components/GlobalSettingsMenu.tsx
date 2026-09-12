@@ -75,6 +75,7 @@ export const GlobalSettingsMenu: React.FC<GlobalSettingsMenuProps> = ({
       showOrbits: val,
       showSatellites: val,
       showGateways: val,
+      showGatewayCoverage: val,
       showISL: val,
       showSatLinks: val,
       showLabels: val,
@@ -291,6 +292,7 @@ export const GlobalSettingsMenu: React.FC<GlobalSettingsMenuProps> = ({
                   <MenuToggleRow label="Орбитальные траектории" checked={settings.showOrbits} onChange={(v) => updateSetting('showOrbits', v)} />
                   <MenuToggleRow label="Спутники группировки (S01..S48)" checked={settings.showSatellites} onChange={(v) => updateSetting('showSatellites', v)} />
                   <MenuToggleRow label="Наземные шлюзы (C65, Murmansk...)" checked={settings.showGateways} onChange={(v) => updateSetting('showGateways', v)} />
+                  <MenuToggleRow label="Купола досягаемости шлюзов" checked={settings.showGatewayCoverage !== false} onChange={(v) => updateSetting('showGatewayCoverage', v)} />
                   <MenuToggleRow label="Межспутниковые линии (ISL)" checked={settings.showISL} onChange={(v) => updateSetting('showISL', v)} />
                   <MenuToggleRow label="Связь спутник - Земля" checked={settings.showSatLinks} onChange={(v) => updateSetting('showSatLinks', v)} />
                   <MenuToggleRow label="Текстовые подписи объектов" checked={settings.showLabels} onChange={(v) => updateSetting('showLabels', v)} />

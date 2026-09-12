@@ -40,6 +40,7 @@ const defaultOutlinerSettings: OutlinerSettings = {
   showOrbits: true,
   showSatellites: true,
   showGateways: true,
+  showGatewayCoverage: true,
   showISL: true,
   showSatLinks: true,
   showLabels: true,

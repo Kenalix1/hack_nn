@@ -40,6 +40,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
     orbits: THREE.Group;
     satellites: THREE.Group;
     gateways: THREE.Group;
+    gatewayDomes: THREE.Group;
     islLines: THREE.Group;
     satLinks: THREE.Group;
     labels: THREE.Group;
@@ -50,6 +51,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
     orbits: new THREE.Group(),
     satellites: new THREE.Group(),
     gateways: new THREE.Group(),
+    gatewayDomes: new THREE.Group(),
     islLines: new THREE.Group(),
     satLinks: new THREE.Group(),
     labels: new THREE.Group(),
@@ -240,6 +242,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
     earthGroup.add(groupsRef.current.orbits);
     earthGroup.add(groupsRef.current.satellites);
     earthGroup.add(groupsRef.current.gateways);
+    earthGroup.add(groupsRef.current.gatewayDomes);
     earthGroup.add(groupsRef.current.islLines);
     earthGroup.add(groupsRef.current.satLinks);
     earthGroup.add(groupsRef.current.labels);
@@ -337,14 +340,14 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
   useEffect(() => {
     if (!scenario) return;
 
-    const { earthGroup, orbits, satellites, gateways, islLines, satLinks, labels, fovCones, atmosMesh } = groupsRef.current;
+    const { earthGroup, orbits, satellites, gateways, gatewayDomes, islLines, satLinks, labels, fovCones, atmosMesh } = groupsRef.current;
 
     if (atmosMesh) {
       atmosMesh.visible = settings.showAtmosphere;
       (atmosMesh.material as THREE.MeshBasicMaterial).color.set(settings.atmosphereColor || '#1e3a8a');
     }
 
-    [orbits, satellites, gateways, islLines, satLinks, labels, fovCones].forEach(g => {
+    [orbits, satellites, gateways, gatewayDomes, islLines, satLinks, labels, fovCones].forEach(g => {
       while (g.children.length > 0) {
         g.remove(g.children[0]);
       }
@@ -669,6 +672,91 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
         const normal = pos.clone().normalize();
         dishObj.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
         gateways.add(dishObj);
+
+        // Ground Gateway Signal Reach Dome (20% translucent dome)
+        if (settings.showGatewayCoverage !== false) {
+          const scenarioAltKm = scenario.raw_scenario?.environment?.altitude_km ?? 550.0;
+          const satHeight = (scenarioAltKm / 1000.0) * 1.2;
+          const domeRadius = Math.max(1.2, satHeight * 1.85);
+
+          // 1. Translucent Hemisphere Dome (20% opacity)
+          const domeGeo = new THREE.SphereGeometry(
+            domeRadius,
+            32,
+            16,
+            0,
+            Math.PI * 2,
+            0,
+            Math.PI / 2
+          );
+
+          const domeMat = new THREE.MeshBasicMaterial({
+            color: settings.gatewayColor || '#00d084',
+            transparent: true,
+            opacity: 0.20,
+            side: THREE.DoubleSide,
+            depthWrite: false
+          });
+
+          const domeMesh = new THREE.Mesh(domeGeo, domeMat);
+          domeMesh.position.copy(pos);
+          const normal = pos.clone().normalize();
+          domeMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+
+          // 2. Base perimeter ring along ground tangent
+          const baseRingPts: THREE.Vector3[] = [];
+          const ringSegments = 48;
+          for (let i = 0; i <= ringSegments; i++) {
+            const ang = (i / ringSegments) * Math.PI * 2;
+            baseRingPts.push(new THREE.Vector3(Math.cos(ang) * domeRadius, 0, Math.sin(ang) * domeRadius));
+          }
+          const baseRingGeo = new THREE.BufferGeometry().setFromPoints(baseRingPts);
+          const baseRingMat = new THREE.LineBasicMaterial({
+            color: settings.gatewayColor || '#00d084',
+            transparent: true,
+            opacity: 0.45,
+            depthWrite: false
+          });
+          const baseRing = new THREE.LineLoop(baseRingGeo, baseRingMat);
+          domeMesh.add(baseRing);
+
+          // 3. Elevation reference ring (45 degrees elevation)
+          const midElevPts: THREE.Vector3[] = [];
+          const rMid = domeRadius * Math.cos(Math.PI / 4);
+          const yMid = domeRadius * Math.sin(Math.PI / 4);
+          for (let i = 0; i <= ringSegments; i++) {
+            const ang = (i / ringSegments) * Math.PI * 2;
+            midElevPts.push(new THREE.Vector3(Math.cos(ang) * rMid, yMid, Math.sin(ang) * rMid));
+          }
+          const midRingGeo = new THREE.BufferGeometry().setFromPoints(midElevPts);
+          const midRingMat = new THREE.LineBasicMaterial({
+            color: settings.gatewayColor || '#00d084',
+            transparent: true,
+            opacity: 0.25,
+            depthWrite: false
+          });
+          const midRing = new THREE.LineLoop(midRingGeo, midRingMat);
+          domeMesh.add(midRing);
+
+          // 4. Cross-Meridian Arches for radar dome structure
+          const archMat = new THREE.LineBasicMaterial({
+            color: settings.gatewayColor || '#00d084',
+            transparent: true,
+            opacity: 0.28,
+            depthWrite: false
+          });
+          const arch1Pts: THREE.Vector3[] = [];
+          const arch2Pts: THREE.Vector3[] = [];
+          for (let i = 0; i <= 32; i++) {
+            const ang = (i / 32) * Math.PI;
+            arch1Pts.push(new THREE.Vector3(Math.cos(ang) * domeRadius, Math.sin(ang) * domeRadius, 0));
+            arch2Pts.push(new THREE.Vector3(0, Math.sin(ang) * domeRadius, Math.cos(ang) * domeRadius));
+          }
+          domeMesh.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(arch1Pts), archMat));
+          domeMesh.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(arch2Pts), archMat));
+
+          gatewayDomes.add(domeMesh);
+        }
       }
 
       if (settings.showLabels && settings.showGateways && isGwVisible) {

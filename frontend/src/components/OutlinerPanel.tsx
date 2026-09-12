@@ -693,6 +693,12 @@ export const OutlinerPanel: React.FC<OutlinerPanelProps> = ({
                     <span style={{ color: '#aaa' }}>Тип</span>
                     <span style={{ color: '#fff' }}>{gw.type || 'Шлюз'}</span>
                   </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#aaa' }}>Купол досягаемости</span>
+                    <span style={{ color: settings.showGatewayCoverage !== false ? '#00d084' : '#888' }}>
+                      {settings.showGatewayCoverage !== false ? '20% непрозрачность' : 'Скрыт'}
+                    </span>
+                  </div>
                 </div>
               </div>
             );
