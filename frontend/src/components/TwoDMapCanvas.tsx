@@ -553,6 +553,86 @@ export const TwoDMapCanvas: React.FC<TwoDMapCanvasProps> = ({
     setCenter(prev => clampCenter(prev.lat, prev.lon, nextZoom));
   };
 
+  // Touch & Pinch Tracking for Mobile
+  const touchStateRef = useRef<{
+    lastX: number;
+    lastY: number;
+    pinchDist: number;
+    isTouchDrag: boolean;
+  }>({ lastX: 0, lastY: 0, pinchDist: 0, isTouchDrag: false });
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      const t = e.touches[0];
+      touchStateRef.current = {
+        lastX: t.clientX,
+        lastY: t.clientY,
+        pinchDist: 0,
+        isTouchDrag: true
+      };
+      setIsDragging(true);
+    } else if (e.touches.length >= 2) {
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      touchStateRef.current = {
+        lastX: (t1.clientX + t2.clientX) / 2,
+        lastY: (t1.clientY + t2.clientY) / 2,
+        pinchDist: Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY),
+        isTouchDrag: true
+      };
+      setIsDragging(true);
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStateRef.current.isTouchDrag) return;
+
+    if (e.touches.length === 1) {
+      const t = e.touches[0];
+      const dx = t.clientX - touchStateRef.current.lastX;
+      const dy = t.clientY - touchStateRef.current.lastY;
+      touchStateRef.current.lastX = t.clientX;
+      touchStateRef.current.lastY = t.clientY;
+
+      const currentZoom = Math.floor(zoom);
+      const scale = Math.pow(2, zoom - currentZoom);
+
+      const dLon = (dx / scale) * (360 / (Math.pow(2, currentZoom) * 256));
+      const dLat = (dy / scale) * (180 / (Math.pow(2, currentZoom) * 256));
+
+      setCenter(prev => clampCenter(prev.lat + dLat, prev.lon - dLon, zoom));
+    } else if (e.touches.length >= 2) {
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const newDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      const oldDist = touchStateRef.current.pinchDist;
+
+      if (oldDist > 0 && Math.abs(newDist - oldDist) > 1) {
+        const factor = newDist / oldDist;
+        const delta = (factor - 1) * 1.5;
+        const nextZoom = Math.max(2.0, Math.min(8.0, Number((zoom + delta).toFixed(2))));
+        setZoom(nextZoom);
+        setCenter(prev => clampCenter(prev.lat, prev.lon, nextZoom));
+      }
+
+      touchStateRef.current.pinchDist = newDist;
+      touchStateRef.current.lastX = (t1.clientX + t2.clientX) / 2;
+      touchStateRef.current.lastY = (t1.clientY + t2.clientY) / 2;
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (e.touches.length === 0) {
+      touchStateRef.current.isTouchDrag = false;
+      setIsDragging(false);
+    } else if (e.touches.length === 1) {
+      const t = e.touches[0];
+      touchStateRef.current.lastX = t.clientX;
+      touchStateRef.current.lastY = t.clientY;
+      touchStateRef.current.pinchDist = 0;
+    }
+  };
+
   const handleMouseUp = () => setIsDragging(false);
 
   return (
@@ -562,7 +642,8 @@ export const TwoDMapCanvas: React.FC<TwoDMapCanvasProps> = ({
       backgroundColor: tileStyle !== 'standard' ? '#0b0f19' : '#e5e7eb',
       position: 'relative',
       overflow: 'hidden',
-      userSelect: 'none'
+      userSelect: 'none',
+      touchAction: 'none'
     }}>
       {/* Main OSM Canvas */}
       <canvas
@@ -572,14 +653,85 @@ export const TwoDMapCanvas: React.FC<TwoDMapCanvasProps> = ({
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
         onWheel={handleWheel}
         style={{
           width: '100%',
           height: '100%',
           cursor: isDragging ? 'grabbing' : 'grab',
-          display: 'block'
+          display: 'block',
+          touchAction: 'none'
         }}
       />
+
+      {/* Floating Zoom Controls for Mobile & Desktop */}
+      <div style={{
+        position: 'absolute',
+        right: '16px',
+        top: '64px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '6px',
+        zIndex: 20
+      }}>
+        <button
+          onClick={() => {
+            const nextZoom = Math.min(8.0, Number((zoom + 0.5).toFixed(2)));
+            setZoom(nextZoom);
+            setCenter(prev => clampCenter(prev.lat, prev.lon, nextZoom));
+          }}
+          style={{
+            width: '38px',
+            height: '38px',
+            backgroundColor: 'rgba(15, 23, 42, 0.88)',
+            border: '1px solid rgba(255, 255, 255, 0.25)',
+            borderRadius: '8px',
+            color: '#ffffff',
+            fontSize: '20px',
+            fontWeight: 700,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+            backdropFilter: 'blur(8px)',
+            touchAction: 'manipulation'
+          }}
+          title="Приблизить карту"
+        >
+          +
+        </button>
+        <button
+          onClick={() => {
+            const nextZoom = Math.max(2.0, Number((zoom - 0.5).toFixed(2)));
+            setZoom(nextZoom);
+            setCenter(prev => clampCenter(prev.lat, prev.lon, nextZoom));
+          }}
+          style={{
+            width: '38px',
+            height: '38px',
+            backgroundColor: 'rgba(15, 23, 42, 0.88)',
+            border: '1px solid rgba(255, 255, 255, 0.25)',
+            borderRadius: '8px',
+            color: '#ffffff',
+            fontSize: '20px',
+            fontWeight: 700,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+            backdropFilter: 'blur(8px)',
+            touchAction: 'manipulation'
+          }}
+          title="Отдалить карту"
+        >
+          −
+        </button>
+      </div>
 
       {/* Telemetry Card Popup */}
       {selectedNode && (

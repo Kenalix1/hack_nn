@@ -22,13 +22,14 @@ export const SatelliteOutageModal: React.FC<SatelliteOutageModalProps> = ({
   onApplyOutage,
   onRestoreSatellite
 }) => {
+  const [duration, setDuration] = useState<number>(3600);
+
   if (!rawSatellite) return null;
 
   const satellite = getDynamicSatelliteTelemetry(rawSatellite, currentTimeSeconds);
 
   const activeOutage = currentOutages.find(o => o.satellite_id === satellite.id);
   const isOffline = !!activeOutage;
-  const [duration, setDuration] = useState<number>(3600);
 
   return (
     <div style={{

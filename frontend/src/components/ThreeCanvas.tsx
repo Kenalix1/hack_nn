@@ -183,6 +183,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
     renderer.domElement.style.display = 'block';
     renderer.domElement.style.width = '100%';
     renderer.domElement.style.height = '100%';
+    renderer.domElement.style.touchAction = 'none';
     container.appendChild(renderer.domElement);
 
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -190,13 +191,39 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
     controls.dampingFactor = 0.05;
     controls.minDistance = 7;
     controls.maxDistance = 120;
+    controls.touches = {
+      ONE: THREE.TOUCH.ROTATE,
+      TWO: THREE.TOUCH.DOLLY_PAN
+    };
+    controls.enableRotate = true;
+    controls.enableZoom = true;
+    controls.enablePan = true;
     controlsRef.current = controls;
+
+    // Track pointer movement to differentiate drag from tap on mobile
+    let isPointerDragging = false;
+    let pointerDownPos = { x: 0, y: 0 };
+
+    const onPointerDown = (e: PointerEvent) => {
+      pointerDownPos = { x: e.clientX, y: e.clientY };
+      isPointerDragging = false;
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y) > 8) {
+        isPointerDragging = true;
+      }
+    };
+
+    renderer.domElement.addEventListener('pointerdown', onPointerDown);
+    renderer.domElement.addEventListener('pointermove', onPointerMove);
 
     // Raycaster Click Handler
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
 
     const handleCanvasClick = (e: MouseEvent) => {
+      if (isPointerDragging) return;
       const rect = renderer.domElement.getBoundingClientRect();
       mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
@@ -401,6 +428,8 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
     animate();
 
     return () => {
+      renderer.domElement.removeEventListener('pointerdown', onPointerDown);
+      renderer.domElement.removeEventListener('pointermove', onPointerMove);
       renderer.domElement.removeEventListener('click', handleCanvasClick);
       resizeObserver.disconnect();
       window.removeEventListener('resize', updateSize);
@@ -1221,7 +1250,8 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
         position: 'absolute',
         top: 0,
         left: 0,
-        zIndex: 1
+        zIndex: 1,
+        touchAction: 'none'
       }}
     />
   );

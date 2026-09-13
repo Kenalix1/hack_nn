@@ -424,6 +424,81 @@ export const TwoDMapModal: React.FC<TwoDMapModalProps> = ({
     });
   };
 
+  // Touch & Pinch Tracking for Mobile
+  const touchStateRef = useRef<{
+    lastX: number;
+    lastY: number;
+    pinchDist: number;
+    isTouchDrag: boolean;
+  }>({ lastX: 0, lastY: 0, pinchDist: 0, isTouchDrag: false });
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      const t = e.touches[0];
+      touchStateRef.current = {
+        lastX: t.clientX,
+        lastY: t.clientY,
+        pinchDist: 0,
+        isTouchDrag: true
+      };
+      setIsDragging(true);
+    } else if (e.touches.length >= 2) {
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      touchStateRef.current = {
+        lastX: (t1.clientX + t2.clientX) / 2,
+        lastY: (t1.clientY + t2.clientY) / 2,
+        pinchDist: Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY),
+        isTouchDrag: true
+      };
+      setIsDragging(true);
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStateRef.current.isTouchDrag) return;
+
+    if (e.touches.length === 1) {
+      const t = e.touches[0];
+      const dx = t.clientX - touchStateRef.current.lastX;
+      const dy = t.clientY - touchStateRef.current.lastY;
+      touchStateRef.current.lastX = t.clientX;
+      touchStateRef.current.lastY = t.clientY;
+
+      setPan(prev => ({
+        x: prev.x + dx,
+        y: prev.y + dy
+      }));
+    } else if (e.touches.length >= 2) {
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const newDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      const oldDist = touchStateRef.current.pinchDist;
+
+      if (oldDist > 0 && Math.abs(newDist - oldDist) > 1) {
+        const factor = newDist / oldDist;
+        const delta = (factor - 1) * 1.5;
+        setZoom(prev => Math.max(1.0, Math.min(8.0, Number((prev + delta).toFixed(2)))));
+      }
+
+      touchStateRef.current.pinchDist = newDist;
+      touchStateRef.current.lastX = (t1.clientX + t2.clientX) / 2;
+      touchStateRef.current.lastY = (t1.clientY + t2.clientY) / 2;
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (e.touches.length === 0) {
+      touchStateRef.current.isTouchDrag = false;
+      setIsDragging(false);
+    } else if (e.touches.length === 1) {
+      const t = e.touches[0];
+      touchStateRef.current.lastX = t.clientX;
+      touchStateRef.current.lastY = t.clientY;
+      touchStateRef.current.pinchDist = 0;
+    }
+  };
+
   const handleMouseUp = () => {
     setIsDragging(false);
   };
@@ -532,7 +607,7 @@ export const TwoDMapModal: React.FC<TwoDMapModalProps> = ({
       </div>
 
       {/* Canvas View Area */}
-      <div style={{ flex: 1, position: 'relative', overflow: 'hidden', cursor: isDragging ? 'grabbing' : 'grab' }}>
+      <div style={{ flex: 1, position: 'relative', overflow: 'hidden', cursor: isDragging ? 'grabbing' : 'grab', touchAction: 'none' }}>
         <canvas
           ref={canvasRef}
           width={840}
@@ -542,7 +617,11 @@ export const TwoDMapModal: React.FC<TwoDMapModalProps> = ({
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
-          style={{ width: '100%', height: '100%', display: 'block' }}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onTouchCancel={handleTouchEnd}
+          style={{ width: '100%', height: '100%', display: 'block', touchAction: 'none' }}
         />
 
         {/* Floating Telemetry Info Card */}

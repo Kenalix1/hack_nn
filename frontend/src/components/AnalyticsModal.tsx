@@ -31,12 +31,35 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
   const [selectedRocket, setSelectedRocket] = useState<'soyuz' | 'angara' | 'falcon'>('soyuz');
   const [mcFilter, setMcFilter] = useState<'all' | 'worst' | 'best'>('all');
 
+  const monteCarlo = scenario?.simulation_result?.monte_carlo;
+  const mcSummary = monteCarlo?.summary;
+  const mcCombinations = monteCarlo?.combinations || [];
+
+  const bestCase = useMemo(() => {
+    if (mcSummary?.best_case) return mcSummary.best_case;
+    if (mcCombinations.length === 0) return null;
+    return [...mcCombinations].sort((a, b) => b.overall_availability - a.overall_availability)[0];
+  }, [mcSummary, mcCombinations]);
+
+  const worstCase = useMemo(() => {
+    if (mcSummary?.worst_case) return mcSummary.worst_case;
+    if (mcCombinations.length === 0) return null;
+    return [...mcCombinations].sort((a, b) => a.overall_availability - b.overall_availability)[0];
+  }, [mcSummary, mcCombinations]);
+
+  const filteredMcCombinations = useMemo(() => {
+    if (mcFilter === 'worst') {
+      return [...mcCombinations].sort((a, b) => a.overall_availability - b.overall_availability);
+    }
+    if (mcFilter === 'best') {
+      return [...mcCombinations].sort((a, b) => b.overall_availability - a.overall_availability);
+    }
+    return mcCombinations;
+  }, [mcCombinations, mcFilter]);
+
   if (!scenario) {
     return <div style={{ padding: '20px', color: '#888' }}>Загрузка данных математического моделирования...</div>;
   }
-
-  const monteCarlo = scenario.simulation_result?.monte_carlo;
-  const mcSummary = monteCarlo?.summary;
 
   // Block analytics display until Monte Carlo simulation has run
   if (!hasRunMonteCarlo || !monteCarlo || !mcSummary) {
@@ -182,34 +205,11 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({
   };
 
   // Monte Carlo stress-test data extraction
-  const mcCombinations = monteCarlo?.combinations || [];
   const mcParams = mcSummary?.parameters;
   const expAvailPct = mcSummary ? (mcSummary.expected_availability * 100).toFixed(2) : overallAvailStr;
   const worstAvailPct = mcSummary ? (mcSummary.worst_case_availability * 100).toFixed(1) : overallAvailStr;
   const expRiskCostM = mcSummary ? (mcSummary.expected_risk_cost / 1e6).toFixed(2) : '0.00';
   const slaBreachProbPct = mcSummary ? (mcSummary.sla_breach_probability * 100).toFixed(1) : '0.0';
-
-  const bestCase = useMemo(() => {
-    if (mcSummary?.best_case) return mcSummary.best_case;
-    if (mcCombinations.length === 0) return null;
-    return [...mcCombinations].sort((a, b) => b.overall_availability - a.overall_availability)[0];
-  }, [mcSummary, mcCombinations]);
-
-  const worstCase = useMemo(() => {
-    if (mcSummary?.worst_case) return mcSummary.worst_case;
-    if (mcCombinations.length === 0) return null;
-    return [...mcCombinations].sort((a, b) => a.overall_availability - b.overall_availability)[0];
-  }, [mcSummary, mcCombinations]);
-
-  const filteredMcCombinations = useMemo(() => {
-    if (mcFilter === 'worst') {
-      return [...mcCombinations].sort((a, b) => a.overall_availability - b.overall_availability);
-    }
-    if (mcFilter === 'best') {
-      return [...mcCombinations].sort((a, b) => b.overall_availability - a.overall_availability);
-    }
-    return mcCombinations;
-  }, [mcCombinations, mcFilter]);
 
   return (
     <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', height: '100%', overflowY: 'auto' }}>
